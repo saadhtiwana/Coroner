@@ -1,0 +1,117 @@
+{
+  "contract_version": "1",
+  "incident_id": "inc-9278eb1c14df",
+  "collected_at": "2026-09-06T00:26:46.756145+05:00",
+  "failure_type": "OOMKilledDuringInit",
+  "pod": {
+    "namespace": "default",
+    "name": "probe-oom-init",
+    "uid": "9117553c-274b-4726-af8c-5ccd37176b19",
+    "node_name": "coroner-worker",
+    "phase": "Running",
+    "created_at": "2026-09-05T23:56:54+05:00",
+    "age_seconds": 1792.756145
+  },
+  "container": {
+    "name": "tiny",
+    "image": "docker.io/library/redis:alpine",
+    "image_id": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+    "ready": false,
+    "restart_count": 10,
+    "command": [
+      "/bin/sh",
+      "-c",
+      "echo alive; sleep 3600"
+    ],
+    "waiting_reason": "CrashLoopBackOff",
+    "waiting_message": "back-off 5m0s restarting failed container=tiny pod=probe-oom-init_default(9117553c-274b-4726-af8c-5ccd37176b19)",
+    "last_terminated": {
+      "exit_code": 128,
+      "reason": "StartError",
+      "message": "failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+      "started_at": "1970-01-01T05:00:00+05:00",
+      "finished_at": "2026-09-06T00:23:12+05:00"
+    },
+    "memory_limit": "2Mi",
+    "memory_request": "2Mi",
+    "has_liveness_probe": false,
+    "has_readiness_probe": false,
+    "crashes_per_minute": 0.33468020827785255
+  },
+  "events": [
+    {
+      "type": "Normal",
+      "reason": "Scheduled",
+      "message": "Successfully assigned default/probe-oom-init to coroner-worker",
+      "count": 1,
+      "first_timestamp": "2026-09-05T23:56:54+05:00",
+      "last_timestamp": "2026-09-05T23:56:54+05:00",
+      "occurrences": 1,
+      "first_seen": "2026-09-05T23:56:54+05:00",
+      "last_seen": "2026-09-05T23:56:54+05:00"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+      "count": 10,
+      "first_timestamp": "2026-09-05T23:56:54+05:00",
+      "last_timestamp": "2026-09-06T00:18:04+05:00",
+      "occurrences": 10,
+      "first_seen": "2026-09-05T23:56:54+05:00",
+      "last_seen": "2026-09-06T00:18:04+05:00",
+      "aggregated": "x10 over 21m10s"
+    },
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container tiny in pod probe-oom-init_default(9117553c-274b-4726-af8c-5ccd37176b19)",
+      "count": 24,
+      "first_timestamp": "2026-09-05T23:56:56+05:00",
+      "last_timestamp": "2026-09-06T00:22:10+05:00",
+      "occurrences": 24,
+      "first_seen": "2026-09-05T23:56:56+05:00",
+      "last_seen": "2026-09-06T00:22:10+05:00",
+      "aggregated": "x24 over 25m14s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+      "count": 11,
+      "first_timestamp": "2026-09-05T23:56:54+05:00",
+      "last_timestamp": "2026-09-06T00:23:12+05:00",
+      "occurrences": 11,
+      "first_seen": "2026-09-05T23:56:54+05:00",
+      "last_seen": "2026-09-06T00:23:12+05:00",
+      "aggregated": "x11 over 26m18s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Created",
+      "message": "Container created",
+      "count": 11,
+      "first_timestamp": "2026-09-05T23:56:54+05:00",
+      "last_timestamp": "2026-09-06T00:23:12+05:00",
+      "occurrences": 11,
+      "first_seen": "2026-09-05T23:56:54+05:00",
+      "last_seen": "2026-09-06T00:23:12+05:00",
+      "aggregated": "x11 over 26m18s"
+    }
+  ],
+  "logs": {
+    "available": true,
+    "empty": true,
+    "from_previous": true,
+    "truncated": false,
+    "content": ""
+  },
+  "node": {
+    "name": "coroner-worker",
+    "ready": true,
+    "memory_pressure": false,
+    "disk_pressure": false,
+    "pid_pressure": false
+  },
+  "redacted_count": 0
+}

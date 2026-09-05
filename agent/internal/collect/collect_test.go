@@ -265,3 +265,30 @@ func TestDerivedFieldsComputedInAgent(t *testing.T) {
 			got.Container.CrashesPerMinute, got.Container.RestartCount)
 	}
 }
+
+// A body that is really the kubelet's retrieval failure must not be recorded
+// as a log. Observed live: a reclaimed container returns HTTP 200 whose entire
+// body is "unable to retrieve container logs for containerd://<id>", which
+// would otherwise set logs_available true for a contract carrying no logs and
+// trip fatal-line detection on the word "unable".
+func TestRuntimeFailureBodyIsNotTreatedAsLogs(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"reclaimed container", "unable to retrieve container logs for containerd://8e53e139841", true},
+		{"previous container gone", "previous terminated container \"app\" in pod \"x\" not found", true},
+		{"waiting to start", "container \"app\" in pod \"x\" is waiting to start: ContainerCreating", true},
+		{"real single-line log", "[fatal] could not initialise connection pool", false},
+		{"real multi-line log", "[startup] booting\n[error] unable to reach db\n", false},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isRuntimeFailureBody(tc.body); got != tc.want {
+				t.Errorf("isRuntimeFailureBody(%q) = %t, want %t", tc.body, got, tc.want)
+			}
+		})
+	}
+}

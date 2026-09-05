@@ -53,6 +53,39 @@ func (f ClientLogFetcher) Fetch(ctx context.Context, namespace, pod, container s
 	return b.String(), nil
 }
 
+// runtimeFailureBodies are responses the kubelet returns with HTTP 200 whose
+// body is the failure notice rather than log content.
+//
+// Observed against a live cluster: a container reclaimed by containerd yields
+// "unable to retrieve container logs for containerd://<id>" as the entire
+// body. Treating that as a log makes logs_available true for a contract that
+// carries no logs, which defeats the distinction the confidence ceilings
+// depend on, and the text itself trips fatal-line detection.
+var runtimeFailureBodies = []string{
+	"unable to retrieve container logs for",
+	"previous terminated container",
+	"is waiting to start",
+	"is not available",
+}
+
+// isRuntimeFailureBody reports whether a log body is really a retrieval
+// failure. The match is deliberately narrow: a single short line matching a
+// known kubelet phrase, so an application that happens to log similar words
+// across many lines is not mistaken for one.
+func isRuntimeFailureBody(body string) bool {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" || strings.Count(trimmed, "\n") > 0 {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	for _, phrase := range runtimeFailureBodies {
+		if strings.HasPrefix(lower, phrase) || strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
 // tailBytes truncates from the front, keeping the end of the log.
 //
 // The fatal line is at the end. Truncating the head loses startup context;

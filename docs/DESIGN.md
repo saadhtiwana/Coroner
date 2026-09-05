@@ -224,9 +224,39 @@ Falsification criteria, to be evaluated against the section 5 ledger:
 - If CrashLoopBackOff exceeds 80 percent, the sample is almost certainly biased
   toward well-instrumented applications and should not be generalised.
 
-Ordering consequence: ImagePullBackOff is implemented first. It is the class
-where correctness is verifiable, which makes it the right vehicle for proving
-the pipeline before the hard reasoning problem is attempted.
+### 2.5 Implementation order
+
+**ImagePullBackOff is implemented first, because it is the only class where
+correctness is externally verifiable.** The registry either has the image or it
+does not, and the event message states which. That makes it possible to tell
+whether the pipeline itself works, independently of whether the reasoning is any
+good: if Coroner gets this class wrong, the defect is in collection, parsing,
+transport, or rendering, not in judgement. No other class offers that
+separation, and building the pipeline against a class where every failure is
+ambiguous would mean debugging two unknowns at once.
+
+**The second class implemented is CrashLoopBackOff, not OOMKilled.** This is
+deliberate and it is the less comfortable choice.
+
+A pipeline validated only against a near-deterministic class accumulates
+assumptions that its author cannot see, precisely because nothing in that class
+violates them. Concretely, ImagePullBackOff never exercises: an empty or
+unretrievable log body, a diagnosis with no single determined answer, a
+confidence ceiling below 0.9, the abstention path, or a case where the evidence
+supports two hypotheses equally. Every one of those is routine in
+CrashLoopBackOff, and several are the mechanisms section 4 depends on. A design
+whose abstention path has never run is a design whose abstention path does not
+work.
+
+Taking CrashLoopBackOff second forces those paths open while the architecture is
+still cheap to change. Taking it last would mean discovering, after both easier
+classes have hardened their assumptions into the code, that the hardest and most
+valuable class does not fit the shape that was built for them.
+
+OOMKilled is third. It is the class most likely to be honestly answered with
+"insufficient context to distinguish a leak from a low limit", which is a
+conclusion worth reaching with the abstention machinery already proven by
+CrashLoopBackOff rather than being built for the first time to serve it.
 
 ---
 
@@ -494,6 +524,8 @@ delivery failure cannot lose the record:
 | `confidence_model`, `confidence_final` | before and after the ceiling |
 | `proposed_action` | the fix offered |
 | `abstained` | whether it reached `INSUFFICIENT_CONTEXT` |
+| `actual_cause` | the true cause, recorded by whoever resolved the incident |
+| `shadow_rating` | in shadow mode, whether the human would have approved |
 
 ### 5.2 Ground truth
 
@@ -531,6 +563,31 @@ detect.
   ceiling that never matches outcomes is miscalibrated and must move
 - contradiction rate from the adversarial pass
 
+**How an abstention gets labelled.** "The share of abstentions that were correct
+to abstain" is not measurable from Coroner's own output: an abstention produces
+no claim to be right or wrong about. The label has to come from outside.
+
+When Coroner abstains, the Slack message asks the human who resolves the
+incident to record the actual cause in one line, and that text is written to the
+record's `actual_cause` field. An abstention is then scored correct if the
+recorded cause is not derivable from the evidence Coroner held, and incorrect if
+it is. The second case is the one worth finding: it means the cause *was* in the
+context and Coroner failed to see it, which is a reasoning or ceiling defect
+rather than a genuine evidence gap, and it is invisible without this label.
+
+The same one-line prompt is asked on rejection, where it explains what the
+diagnosis got wrong.
+
+**This produces a second asset.** Accumulated `actual_cause` entries are a small
+corpus of real root causes paired with the exact evidence available at the time.
+That corpus is the only honest way to evaluate a proposed change to the context
+contract: a candidate contract can be scored by asking how many previously
+undiagnosable incidents it would have made diagnosable, offline, without waiting
+for new incidents or re-running a model against production. Section 2.4's
+falsification criterion for CrashLoopBackOff, that a sub-40 percent hit rate
+indicts the contract rather than the prompt, is only actionable because this
+corpus exists to test the replacement against.
+
 ### 5.4 Storage
 
 SQLite, brain-side, schema-versioned, append-only. No record is deleted or
@@ -545,10 +602,142 @@ approve button, until it clears its section 2.4 prediction over at least 20
 incidents. This makes section 2's committed predictions load-bearing rather than
 decorative: they are the gate on shipping.
 
+**The bootstrap problem.** As stated, that rule cannot be satisfied. Promotion
+requires 20 labelled incidents, the label in section 5.2 is the approve or
+reject decision, and shadow mode renders no approve button. A failure type in
+shadow mode would therefore accumulate zero labels and remain in shadow mode
+permanently, which is not a conservative default but a deadlock.
+
+**Resolution: rating and approval are separate acts.** In shadow mode the
+message carries a rating control asking "would you have approved this?", with
+answers `would_approve`, `would_reject`, and `unsure`, written to
+`shadow_rating`. It authorises nothing. Nothing executes. It is a judgement
+about the diagnosis, recorded at the moment the human has the incident in front
+of them and can cheaply say whether Coroner was right.
+
+That yields the label without granting the action, so promotion is reachable
+while the safety property, that no mutation occurs without a real approval keyed
+to a diagnosis, is untouched.
+
+Two consequences worth stating:
+
+**Rating and approval are stored in different fields and never merged.** A
+rating is cheap and hypothetical; an approval carries consequence and is made
+under different incentives. A human who says they would have approved has not
+borne the risk of being wrong, so ratings are expected to run optimistic
+relative to real approvals. Collapsing them into one column would hide exactly
+that bias. After promotion, the gap between a class's shadow rating rate and its
+subsequent approval rate is itself a useful measurement, and it is only
+available because the two were kept apart.
+
+**Abstentions are rated too.** In shadow mode an `INSUFFICIENT_CONTEXT` outcome
+still asks whether abstaining was the right call, which is the same signal
+described in 5.3 and feeds the same metric.
+
 ---
 
 ## 6. Decisions made without input
 
-No entries yet. This section records choices made unilaterally during
-implementation that a reviewer might reasonably have wanted to make themselves,
-so they are visible rather than buried in commit history.
+Choices made unilaterally that a reviewer might reasonably have wanted to make
+themselves, recorded here so they are visible rather than buried in commit
+history. All entries below are ratified and implemented.
+
+### 6.1 The three MVP failure types
+
+**Decision:** CrashLoopBackOff, ImagePullBackOff, and OOMKilled.
+
+Chosen without being specified. They were picked to span the recoverability
+range rather than to be the three most common: one class where the cause is
+fully present in the structured context, one where the fact is certain but the
+cause is not recoverable from a single snapshot, and one bounded entirely by
+application log quality. A set chosen purely by frequency would likely have
+included Pending or unschedulable and would have made section 2's honest
+assessment less informative, because the classes would not have differed in the
+dimension that matters.
+
+**Ratified as implemented.**
+
+### 6.2 Keeping the 64Mi StartError capture as a fourth fixture
+
+**Decision:** `fixtures/oom-startError/` is retained as a distinct incident,
+making four fixtures for three failure types.
+
+It was produced by accident while trying to record a canonical OOMKilled: at a
+64Mi limit the container was killed during runtime init rather than during
+execution, yielding `StartError` with exit code 128 and surfacing as
+`CrashLoopBackOff`, instead of `OOMKilled` with 137. The obvious move was to
+discard it as a bad capture. It was kept because it is the only concrete proof
+that a classifier keyed on exit code 137 misses a real and reachable OOM case,
+and because it demonstrates that the surface `waiting.reason` does not identify
+the failure type. It is now the evidence behind that claim in section 2.2.
+
+**Ratified as implemented.**
+
+### 6.3 SQLite for the accuracy ledger
+
+**Decision:** the section 5 ledger is SQLite, brain-side, schema-versioned and
+append-only.
+
+No storage was specified. SQLite was chosen because the ledger is small,
+single-writer, and read almost exclusively by one process, and because a file
+that can be copied and inspected with standard tools keeps the ledger honest in
+a way a hosted service does not. It is also consistent with section 1's refusal
+to become an observability platform: reaching for Postgres or a time-series
+store would invite the ledger to grow into general queryability, which is
+explicitly not its job.
+
+**Ratified as implemented.**
+
+### 6.4 Implementation order
+
+**Decision:** ImagePullBackOff first, then CrashLoopBackOff, then OOMKilled.
+
+The first choice was made unilaterally; the ordering of the remaining two was
+raised in review and confirmed. The rationale, including the risk that a
+pipeline validated only on a near-deterministic class hardens invisible
+assumptions, is in section 2.5.
+
+**Ratified as implemented.**
+
+### 6.5 Read-only RBAC until an execution path exists
+
+**Decision:** `deploy/manifests/rbac.yaml` grants only get, list, and watch. No
+write verbs exist anywhere in the deployed configuration.
+
+The design requires approval before mutation, and it would have been reasonable
+to define the full permission set now and rely on the approval gate to police
+it. Granting nothing instead makes an unapproved mutation impossible rather than
+merely disallowed, which is a stronger guarantee than any code path can offer,
+and it means a defect in the approval logic during development cannot damage a
+cluster. Write verbs are added in the phase that implements approval-gated
+execution, not before.
+
+**Ratified as implemented.**
+
+### 6.6 Resolving the Phase 0 and Phase 1 instruction conflict
+
+**Decision:** Phase 1's scaffold instruction was treated as superseding Phase
+0's standing prohibitions, so the project directory was created and `git init`
+was run.
+
+Phase 0 ended with an explicit instruction not to create the project directory
+and not to run `git init`. Phase 1 then required a Go module, a Python package,
+fixtures, and per-commit history, none of which are possible without both. The
+prohibitions were read as scoped to Phase 0, where the task was diagnostics
+only, rather than as standing constraints.
+
+A related conflict was resolved the other way. Phase 1 asked for the kind config
+at `deploy/kind-cluster.yaml` while the same message repeated the prohibition on
+creating the project directory. At that point nothing else required the
+directory, so the narrower reading was available and was taken: the file was
+staged outside the repository and the prohibition was honoured until Phase 1
+proper. The general rule applied in both cases is that an explicit instruction
+to produce something overrides an earlier prohibition only when the instruction
+cannot otherwise be satisfied.
+
+One structural consequence: the root commit, `bf67cb9`, which installs the
+commit-msg hook, is on `main` rather than on `chore/scaffold`. A branch requires
+a merge base and empty commits are prohibited, so the first commit could not
+itself sit on the phase branch.
+
+**Ratified as implemented.**

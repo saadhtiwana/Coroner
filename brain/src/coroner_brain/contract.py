@@ -32,8 +32,11 @@ class Terminated(BaseModel):
     reason: str
     signal: int = 0
     message: str = ""
-    started_at: datetime
-    finished_at: datetime
+
+    # Null when the container never started. Kubernetes reports a zero
+    # timestamp there; the agent sends null rather than a date in 1970.
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 class Pod(BaseModel):
@@ -52,6 +55,8 @@ class Container(BaseModel):
     image_id: str
     ready: bool
     restart_count: int
+    command: list[str] = Field(default_factory=list)
+    args: list[str] = Field(default_factory=list)
 
     waiting_reason: str = ""
     waiting_message: str = ""
@@ -75,9 +80,19 @@ class Event(BaseModel):
     type: str
     reason: str
     message: str
-    count: int
-    first_timestamp: datetime
-    last_timestamp: datetime
+
+    # Both representations are preserved; either may be the populated one.
+    count: int = 0
+    first_timestamp: datetime | None = None
+    last_timestamp: datetime | None = None
+    series_count: int = 0
+    series_last_observed: datetime | None = None
+
+    # Normalized across both, plus the reconstructed kubectl phrasing.
+    occurrences: int = 1
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
+    aggregated: str = ""
 
 
 class Logs(BaseModel):
@@ -110,6 +125,9 @@ class Contract(BaseModel):
     incident_id: str
     collected_at: datetime
 
+    # The classified shape, not the pod's surface waiting reason.
+    failure_type: str
+
     pod: Pod
     owner: Owner | None = None
     container: Container
@@ -118,3 +136,4 @@ class Contract(BaseModel):
     node: NodeSummary
 
     redacted_count: int = 0
+    redacted_kinds: list[str] = Field(default_factory=list)

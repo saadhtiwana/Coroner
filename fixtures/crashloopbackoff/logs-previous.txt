@@ -1,0 +1,5 @@
+[startup] orders-api booting
+[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders
+[startup] establishing connection pool (size=10)
+[error]   dial tcp 10.96.31.14:5432: connect: connection refused
+[fatal]   could not initialise connection pool after 1 attempt

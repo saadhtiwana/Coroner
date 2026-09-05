@@ -1,0 +1,5 @@
+[startup] report-worker booting
+[index]   building in-memory index for tenant=acme
+[index]   loaded segment 1 (~16MiB resident)
+[index]   loaded segment 2 (~32MiB resident)
+[index]   loaded segment 3 (~48MiB resident)

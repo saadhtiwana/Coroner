@@ -1,0 +1,597 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1622",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:10:00Z",
+            "message": "Successfully assigned default/probe-oom to coroner-worker2",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-oom.18d27f255e3005fd",
+                "namespace": "default",
+                "resourceVersion": "1625",
+                "uid": "80169983-3330-486a-80f6-141d1d334cf8"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 6,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:52Z",
+            "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-oom.18d27f2576b31530",
+                "namespace": "default",
+                "resourceVersion": "2007",
+                "uid": "9c0f68ba-dbbe-4b74-8646-21fa7487bf93"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 6,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:52Z",
+            "message": "Container created",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-oom.18d27f257875bd84",
+                "namespace": "default",
+                "resourceVersion": "2008",
+                "uid": "92c7905d-b6c0-4d99-94a1-79dbd6f0bdc4"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:10:00Z",
+            "message": "Container started",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-oom.18d27f257c327888",
+                "namespace": "default",
+                "resourceVersion": "1635",
+                "uid": "95f377ec-68e3-4e03-b158-d7ea325776a1"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:01Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:52Z",
+            "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:01Z",
+                "name": "probe-oom.18d27f25a9676868",
+                "namespace": "default",
+                "resourceVersion": "2009",
+                "uid": "e51cbde9-93ba-460f-8104-2c56b299e0a9"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 6,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:02Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:53Z",
+            "message": "Back-off restarting failed container hog in pod probe-oom_default(55bd02e6-0857-4c8e-aa95-e7ad3c76486f)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:02Z",
+                "name": "probe-oom.18d27f25df4d23f9",
+                "namespace": "default",
+                "resourceVersion": "2012",
+                "uid": "8bed0db4-c503-41b5-aa9f-1957fd11bbff"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:16Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "1624",
+                "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:10:16Z",
+            "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: procReady not received",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:16Z",
+                "name": "probe-oom.18d27f291afa5dad",
+                "namespace": "default",
+                "resourceVersion": "1691",
+                "uid": "f5d95319-05b4-4979-8219-4f0b896b8e16"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:06Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2045",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:13:06Z",
+            "message": "Successfully assigned default/probe-oom to coroner-worker2",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:06Z",
+                "name": "probe-oom.18d27f50ae405cbf",
+                "namespace": "default",
+                "resourceVersion": "2047",
+                "uid": "278497df-112d-46fc-872b-7d0afb879c8f"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:06Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2046",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:14:31Z",
+            "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:06Z",
+                "name": "probe-oom.18d27f50c5baeb62",
+                "namespace": "default",
+                "resourceVersion": "2229",
+                "uid": "4828e959-2fa9-4c78-918b-b8eea1abe6ae"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:06Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2046",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:14:31Z",
+            "message": "Container created",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:06Z",
+                "name": "probe-oom.18d27f50c638439a",
+                "namespace": "default",
+                "resourceVersion": "2231",
+                "uid": "cd48fba7-ea87-4e8b-b1cb-f91e9e5fed8c"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:06Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2046",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:13:06Z",
+            "message": "Container started",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:06Z",
+                "name": "probe-oom.18d27f50c825a132",
+                "namespace": "default",
+                "resourceVersion": "2053",
+                "uid": "cb1c1622-35d0-4041-85d8-9b960a107ef3"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:07Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2046",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:14:31Z",
+            "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:07Z",
+                "name": "probe-oom.18d27f50e720d755",
+                "namespace": "default",
+                "resourceVersion": "2232",
+                "uid": "32e04237-da3e-42ae-a433-f77c3759029f"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:13:08Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2046",
+                "uid": "e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:14:31Z",
+            "message": "Back-off restarting failed container hog in pod probe-oom_default(e09fdd08-1c8c-4ca3-8a1d-a8c607b8bcdb)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:13:08Z",
+                "name": "probe-oom.18d27f511e97aac0",
+                "namespace": "default",
+                "resourceVersion": "2233",
+                "uid": "6eb6086e-f959-438f-ae81-360716710647"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:15:33Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2343",
+                "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:33Z",
+            "message": "Successfully assigned default/probe-oom to coroner-worker2",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:15:33Z",
+                "name": "probe-oom.18d27f72cc715b60",
+                "namespace": "default",
+                "resourceVersion": "2345",
+                "uid": "24c01977-b147-4aaa-83e3-443ae7c1a743"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 3,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:15:33Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2344",
+                "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:48Z",
+            "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:15:33Z",
+                "name": "probe-oom.18d27f72e69394ce",
+                "namespace": "default",
+                "resourceVersion": "2385",
+                "uid": "3a5797ce-4372-42a4-add2-1bdf83a233f8"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 3,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:15:33Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2344",
+                "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:48Z",
+            "message": "Container created",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:15:33Z",
+                "name": "probe-oom.18d27f72e7cb13f8",
+                "namespace": "default",
+                "resourceVersion": "2387",
+                "uid": "a2ba81b5-59ef-429c-bcfe-a87cf098c7e8"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 3,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:15:33Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2344",
+                "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:48Z",
+            "message": "Container started",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:15:33Z",
+                "name": "probe-oom.18d27f72eb1bebd7",
+                "namespace": "default",
+                "resourceVersion": "2388",
+                "uid": "0d8eb207-dfd6-4760-a48f-f80de1578094"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 2,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:15:35Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{hog}",
+                "kind": "Pod",
+                "name": "probe-oom",
+                "namespace": "default",
+                "resourceVersion": "2344",
+                "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:48Z",
+            "message": "Back-off restarting failed container hog in pod probe-oom_default(d68613c5-56e4-49d0-9f0b-0050c71fd3e4)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:15:35Z",
+                "name": "probe-oom.18d27f737765373b",
+                "namespace": "default",
+                "resourceVersion": "2392",
+                "uid": "2f4cb550-b40b-4423-86bd-95f4ed2b1c9c"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

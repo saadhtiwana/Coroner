@@ -1,0 +1,205 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1617",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:10:00Z",
+            "message": "Successfully assigned default/probe-imagepull to coroner-worker",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-imagepull.18d27f255dbf700c",
+                "namespace": "default",
+                "resourceVersion": "1621",
+                "uid": "e6ceb5fb-0565-4c42-94bb-2aab7f139a8e"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{puller}",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1619",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:11:38Z",
+            "message": "Pulling image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\"",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-imagepull.18d27f257656006a",
+                "namespace": "default",
+                "resourceVersion": "1865",
+                "uid": "bcf36f9b-333b-4421-b551-91dce2a2513f"
+            },
+            "reason": "Pulling",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:02Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{puller}",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1619",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:11:40Z",
+            "message": "Failed to pull image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to pull and unpack image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to resolve reference \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Asaadhtiwana%2Fcoroner-does-not-exist%3Apull\u0026service=ghcr.io: 403 Forbidden",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:02Z",
+                "name": "probe-imagepull.18d27f25c62c3d38",
+                "namespace": "default",
+                "resourceVersion": "1867",
+                "uid": "0fb92b87-7d62-43b8-bce7-e99b7f5d1d0f"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 4,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:02Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{puller}",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1619",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:11:40Z",
+            "message": "Error: ErrImagePull",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:02Z",
+                "name": "probe-imagepull.18d27f25c6314a83",
+                "namespace": "default",
+                "resourceVersion": "1868",
+                "uid": "08c92b39-2810-4640-9701-4957ace30ddd"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 11,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:02Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{puller}",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1619",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:56Z",
+            "message": "Back-off pulling image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\"",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:02Z",
+                "name": "probe-imagepull.18d27f25defb93ed",
+                "namespace": "default",
+                "resourceVersion": "2020",
+                "uid": "bc0186e8-4bf8-4867-838c-59d229d75ddf"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 11,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:02Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{puller}",
+                "kind": "Pod",
+                "name": "probe-imagepull",
+                "namespace": "default",
+                "resourceVersion": "1619",
+                "uid": "a4cf8694-e256-47b8-b781-374ac549ac59"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:12:56Z",
+            "message": "Error: ImagePullBackOff",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:02Z",
+                "name": "probe-imagepull.18d27f25defe74be",
+                "namespace": "default",
+                "resourceVersion": "2021",
+                "uid": "3909daa0-d69d-40ff-bc5f-67950eedcc15"
+            },
+            "reason": "Failed",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker"
+            },
+            "type": "Warning"
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

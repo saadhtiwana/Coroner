@@ -1,0 +1,53 @@
+Name:             probe-imagepull
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             coroner-worker/172.21.0.4
+Start Time:       Sat, 05 Sep 2026 23:10:00 +0500
+Labels:           coroner.dev/purpose=fixture
+Annotations:      <none>
+Status:           Pending
+IP:               10.244.2.2
+IPs:
+  IP:  10.244.2.2
+Containers:
+  puller:
+    Container ID:   
+    Image:          ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0
+    Image ID:       
+    Port:           <none>
+    Host Port:      <none>
+    State:          Waiting
+      Reason:       ImagePullBackOff
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6jqp2 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-6jqp2:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                 From               Message
+  ----     ------     ----                ----               -------
+  Normal   Scheduled  3m5s                default-scheduler  Successfully assigned default/probe-imagepull to coroner-worker
+  Normal   Pulling    87s (x4 over 3m5s)  kubelet            spec.containers{puller}: Pulling image "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0"
+  Warning  Failed     85s (x4 over 3m3s)  kubelet            spec.containers{puller}: Failed to pull image "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0": failed to pull and unpack image "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0": failed to resolve reference "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0": failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Asaadhtiwana%2Fcoroner-does-not-exist%3Apull&service=ghcr.io: 403 Forbidden
+  Warning  Failed     85s (x4 over 3m3s)  kubelet            spec.containers{puller}: Error: ErrImagePull
+  Normal   BackOff    9s (x11 over 3m3s)  kubelet            spec.containers{puller}: Back-off pulling image "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0"
+  Warning  Failed     9s (x11 over 3m3s)  kubelet            spec.containers{puller}: Error: ImagePullBackOff

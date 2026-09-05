@@ -1,0 +1,253 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"metadata\":{\"annotations\":{},\"labels\":{\"coroner.dev/purpose\":\"fixture\"},\"name\":\"probe-oom\",\"namespace\":\"default\"},\"spec\":{\"containers\":[{\"args\":[\"echo \\\"[startup] report-worker booting\\\"\\necho \\\"[index]   building in-memory index for tenant=acme\\\"\\nchunk=$(head -c 16777216 /dev/zero | tr '\\\\0' 'x')\\nacc=\\\"\\\"; i=0\\nwhile [ $i -lt 40 ]; do\\n  acc=\\\"$acc$chunk\\\"; i=$((i+1))\\n  echo \\\"[index]   loaded segment $i (~$((i*16))MiB resident)\\\"\\ndone\\necho \\\"[index]   build complete\\\"\\nsleep 3600\\n\"],\"command\":[\"/bin/sh\",\"-c\"],\"image\":\"redis:alpine\",\"imagePullPolicy\":\"Never\",\"name\":\"hog\",\"resources\":{\"limits\":{\"memory\":\"128Mi\"},\"requests\":{\"memory\":\"128Mi\"}}}],\"restartPolicy\":\"Always\",\"terminationGracePeriodSeconds\":1}}\n"
+        },
+        "creationTimestamp": "2026-09-05T18:15:33Z",
+        "generation": 1,
+        "labels": {
+            "coroner.dev/purpose": "fixture"
+        },
+        "name": "probe-oom",
+        "namespace": "default",
+        "resourceVersion": "2393",
+        "uid": "d68613c5-56e4-49d0-9f0b-0050c71fd3e4"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "echo \"[startup] report-worker booting\"\necho \"[index]   building in-memory index for tenant=acme\"\nchunk=$(head -c 16777216 /dev/zero | tr '\\0' 'x')\nacc=\"\"; i=0\nwhile [ $i -lt 40 ]; do\n  acc=\"$acc$chunk\"; i=$((i+1))\n  echo \"[index]   loaded segment $i (~$((i*16))MiB resident)\"\ndone\necho \"[index]   build complete\"\nsleep 3600\n"
+                ],
+                "command": [
+                    "/bin/sh",
+                    "-c"
+                ],
+                "image": "redis:alpine",
+                "imagePullPolicy": "Never",
+                "name": "hog",
+                "resources": {
+                    "limits": {
+                        "memory": "128Mi"
+                    },
+                    "requests": {
+                        "memory": "128Mi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-sx56x",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "coroner-worker2",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 1,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "kube-api-access-sx56x",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "memory": "128Mi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:15:33Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:15:33Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:15:48Z",
+                "message": "containers with unready status: [hog]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:15:48Z",
+                "message": "containers with unready status: [hog]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:15:33Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "memory": "128Mi"
+                },
+                "containerID": "containerd://3ee931ac5fe27f2c4bc21d90915052c797c87d46d1b2dd078adabf56ff4a7c7d",
+                "image": "docker.io/library/redis:alpine",
+                "imageID": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+                "lastState": {
+                    "terminated": {
+                        "containerID": "containerd://93435f9df804052e056d17f2f45fb5e2a79177b9147eaa9b90386a8cfdffbdca",
+                        "exitCode": 137,
+                        "finishedAt": "2026-09-05T18:15:35Z",
+                        "reason": "OOMKilled",
+                        "startedAt": "2026-09-05T18:15:34Z"
+                    }
+                },
+                "name": "hog",
+                "ready": false,
+                "resources": {
+                    "limits": {
+                        "memory": "128Mi"
+                    },
+                    "requests": {
+                        "memory": "128Mi"
+                    }
+                },
+                "restartCount": 2,
+                "started": false,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://3ee931ac5fe27f2c4bc21d90915052c797c87d46d1b2dd078adabf56ff4a7c7d",
+                        "exitCode": 137,
+                        "finishedAt": "2026-09-05T18:15:48Z",
+                        "reason": "OOMKilled",
+                        "startedAt": "2026-09-05T18:15:48Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            6,
+                            10,
+                            11,
+                            20,
+                            26,
+                            27
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-sx56x",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.21.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.21.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.244.1.6",
+        "podIPs": [
+            {
+                "ip": "10.244.1.6"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "128Mi"
+            },
+            "requests": {
+                "memory": "128Mi"
+            }
+        },
+        "startTime": "2026-09-05T18:15:33Z"
+    }
+}

@@ -1,0 +1,78 @@
+Name:             probe-oom
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             coroner-worker2/172.21.0.2
+Start Time:       Sat, 05 Sep 2026 23:10:00 +0500
+Labels:           coroner.dev/purpose=fixture
+Annotations:      <none>
+Status:           Running
+IP:               10.244.1.4
+IPs:
+  IP:  10.244.1.4
+Containers:
+  hog:
+    Container ID:  containerd://50d325ba183b536226bc98afd145a9742fa798feaaf7e451362794c22ad16be9
+    Image:         redis:alpine
+    Image ID:      docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/sh
+      -c
+    Args:
+      echo "[startup] report-worker booting, building in-memory index"
+      dd if=/dev/zero of=/ram/index.bin bs=1M count=256
+      echo "[startup] index built"
+      sleep 3600
+      
+    State:          Waiting
+      Reason:       RunContainerError
+    Last State:     Terminated
+      Reason:       StartError
+      Message:      failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)
+      Exit Code:    128
+      Started:      Thu, 01 Jan 1970 05:00:00 +0500
+      Finished:     Sat, 05 Sep 2026 23:12:52 +0500
+    Ready:          False
+    Restart Count:  5
+    Limits:
+      memory:  64Mi
+    Requests:
+      memory:     64Mi
+    Environment:  <none>
+    Mounts:
+      /ram from ram (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-pwfq2 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  ram:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  <unset>
+  kube-api-access-pwfq2:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                 From               Message
+  ----     ------     ----                ----               -------
+  Normal   Scheduled  3m5s                default-scheduler  Successfully assigned default/probe-oom to coroner-worker2
+  Normal   Started    3m5s                kubelet            spec.containers{hog}: Container started
+  Warning  Failed     2m49s               kubelet            spec.containers{hog}: Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: procReady not received
+  Normal   Pulled     13s (x6 over 3m5s)  kubelet            spec.containers{hog}: Container image "redis:alpine" already present on machine and can be accessed by the pod
+  Normal   Created    13s (x6 over 3m5s)  kubelet            spec.containers{hog}: Container created
+  Warning  Failed     13s (x4 over 3m4s)  kubelet            spec.containers{hog}: Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)
+  Warning  BackOff    12s (x6 over 3m3s)  kubelet            spec.containers{hog}: Back-off restarting failed container hog in pod probe-oom_default(55bd02e6-0857-4c8e-aa95-e7ad3c76486f)

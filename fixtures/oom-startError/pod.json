@@ -1,0 +1,265 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"metadata\":{\"annotations\":{},\"labels\":{\"coroner.dev/purpose\":\"fixture\"},\"name\":\"probe-oom\",\"namespace\":\"default\"},\"spec\":{\"containers\":[{\"args\":[\"echo \\\"[startup] report-worker booting, building in-memory index\\\"\\ndd if=/dev/zero of=/ram/index.bin bs=1M count=256\\necho \\\"[startup] index built\\\"\\nsleep 3600\\n\"],\"command\":[\"/bin/sh\",\"-c\"],\"image\":\"redis:alpine\",\"imagePullPolicy\":\"Never\",\"name\":\"hog\",\"resources\":{\"limits\":{\"memory\":\"64Mi\"},\"requests\":{\"memory\":\"64Mi\"}},\"volumeMounts\":[{\"mountPath\":\"/ram\",\"name\":\"ram\"}]}],\"restartPolicy\":\"Always\",\"terminationGracePeriodSeconds\":1,\"volumes\":[{\"emptyDir\":{\"medium\":\"Memory\"},\"name\":\"ram\"}]}}\n"
+        },
+        "creationTimestamp": "2026-09-05T18:10:00Z",
+        "generation": 1,
+        "labels": {
+            "coroner.dev/purpose": "fixture"
+        },
+        "name": "probe-oom",
+        "namespace": "default",
+        "resourceVersion": "2013",
+        "uid": "55bd02e6-0857-4c8e-aa95-e7ad3c76486f"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "echo \"[startup] report-worker booting, building in-memory index\"\ndd if=/dev/zero of=/ram/index.bin bs=1M count=256\necho \"[startup] index built\"\nsleep 3600\n"
+                ],
+                "command": [
+                    "/bin/sh",
+                    "-c"
+                ],
+                "image": "redis:alpine",
+                "imagePullPolicy": "Never",
+                "name": "hog",
+                "resources": {
+                    "limits": {
+                        "memory": "64Mi"
+                    },
+                    "requests": {
+                        "memory": "64Mi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/ram",
+                        "name": "ram"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-pwfq2",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "coroner-worker2",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 1,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "emptyDir": {
+                    "medium": "Memory"
+                },
+                "name": "ram"
+            },
+            {
+                "name": "kube-api-access-pwfq2",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "memory": "64Mi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:10:00Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:10:00Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:10:01Z",
+                "message": "containers with unready status: [hog]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:10:01Z",
+                "message": "containers with unready status: [hog]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:10:00Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "memory": "64Mi"
+                },
+                "containerID": "containerd://50d325ba183b536226bc98afd145a9742fa798feaaf7e451362794c22ad16be9",
+                "image": "docker.io/library/redis:alpine",
+                "imageID": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+                "lastState": {
+                    "terminated": {
+                        "containerID": "containerd://50d325ba183b536226bc98afd145a9742fa798feaaf7e451362794c22ad16be9",
+                        "exitCode": 128,
+                        "finishedAt": "2026-09-05T18:12:52Z",
+                        "message": "failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+                        "reason": "StartError",
+                        "startedAt": "1970-01-01T00:00:00Z"
+                    }
+                },
+                "name": "hog",
+                "ready": false,
+                "resources": {
+                    "limits": {
+                        "memory": "64Mi"
+                    },
+                    "requests": {
+                        "memory": "64Mi"
+                    }
+                },
+                "restartCount": 5,
+                "started": false,
+                "state": {
+                    "waiting": {
+                        "message": "failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+                        "reason": "RunContainerError"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            6,
+                            10,
+                            11,
+                            20,
+                            26,
+                            27
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/ram",
+                        "name": "ram"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-pwfq2",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.21.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.21.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.244.1.4",
+        "podIPs": [
+            {
+                "ip": "10.244.1.4"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "64Mi"
+            },
+            "requests": {
+                "memory": "64Mi"
+            }
+        },
+        "startTime": "2026-09-05T18:10:00Z"
+    }
+}

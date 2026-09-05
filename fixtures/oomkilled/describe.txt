@@ -1,0 +1,79 @@
+Name:             probe-oom
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             coroner-worker2/172.21.0.2
+Start Time:       Sat, 05 Sep 2026 23:15:33 +0500
+Labels:           coroner.dev/purpose=fixture
+Annotations:      <none>
+Status:           Running
+IP:               10.244.1.6
+IPs:
+  IP:  10.244.1.6
+Containers:
+  hog:
+    Container ID:  containerd://3ee931ac5fe27f2c4bc21d90915052c797c87d46d1b2dd078adabf56ff4a7c7d
+    Image:         redis:alpine
+    Image ID:      docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/sh
+      -c
+    Args:
+      echo "[startup] report-worker booting"
+      echo "[index]   building in-memory index for tenant=acme"
+      chunk=$(head -c 16777216 /dev/zero | tr '\0' 'x')
+      acc=""; i=0
+      while [ $i -lt 40 ]; do
+        acc="$acc$chunk"; i=$((i+1))
+        echo "[index]   loaded segment $i (~$((i*16))MiB resident)"
+      done
+      echo "[index]   build complete"
+      sleep 3600
+      
+    State:          Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Sat, 05 Sep 2026 23:15:48 +0500
+      Finished:     Sat, 05 Sep 2026 23:15:48 +0500
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Sat, 05 Sep 2026 23:15:34 +0500
+      Finished:     Sat, 05 Sep 2026 23:15:35 +0500
+    Ready:          False
+    Restart Count:  2
+    Limits:
+      memory:  128Mi
+    Requests:
+      memory:     128Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-sx56x (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-sx56x:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  33s                default-scheduler  Successfully assigned default/probe-oom to coroner-worker2
+  Normal   Pulled     18s (x3 over 33s)  kubelet            spec.containers{hog}: Container image "redis:alpine" already present on machine and can be accessed by the pod
+  Normal   Created    18s (x3 over 33s)  kubelet            spec.containers{hog}: Container created
+  Normal   Started    18s (x3 over 33s)  kubelet            spec.containers{hog}: Container started
+  Warning  BackOff    18s (x2 over 31s)  kubelet            spec.containers{hog}: Back-off restarting failed container hog in pod probe-oom_default(d68613c5-56e4-49d0-9f0b-0050c71fd3e4)

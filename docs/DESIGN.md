@@ -524,6 +524,7 @@ delivery failure cannot lose the record:
 | `confidence_model`, `confidence_final` | before and after the ceiling |
 | `proposed_action` | the fix offered |
 | `abstained` | whether it reached `INSUFFICIENT_CONTEXT` |
+| `actual_cause` | the true cause, recorded by whoever resolved the incident |
 
 ### 5.2 Ground truth
 
@@ -560,6 +561,31 @@ detect.
 - calibration: predicted confidence bucketed against observed approval, since a
   ceiling that never matches outcomes is miscalibrated and must move
 - contradiction rate from the adversarial pass
+
+**How an abstention gets labelled.** "The share of abstentions that were correct
+to abstain" is not measurable from Coroner's own output: an abstention produces
+no claim to be right or wrong about. The label has to come from outside.
+
+When Coroner abstains, the Slack message asks the human who resolves the
+incident to record the actual cause in one line, and that text is written to the
+record's `actual_cause` field. An abstention is then scored correct if the
+recorded cause is not derivable from the evidence Coroner held, and incorrect if
+it is. The second case is the one worth finding: it means the cause *was* in the
+context and Coroner failed to see it, which is a reasoning or ceiling defect
+rather than a genuine evidence gap, and it is invisible without this label.
+
+The same one-line prompt is asked on rejection, where it explains what the
+diagnosis got wrong.
+
+**This produces a second asset.** Accumulated `actual_cause` entries are a small
+corpus of real root causes paired with the exact evidence available at the time.
+That corpus is the only honest way to evaluate a proposed change to the context
+contract: a candidate contract can be scored by asking how many previously
+undiagnosable incidents it would have made diagnosable, offline, without waiting
+for new incidents or re-running a model against production. Section 2.4's
+falsification criterion for CrashLoopBackOff, that a sub-40 percent hit rate
+indicts the contract rather than the prompt, is only actionable because this
+corpus exists to test the replacement against.
 
 ### 5.4 Storage
 

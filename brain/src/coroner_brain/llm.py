@@ -1,0 +1,85 @@
+"""Model client.
+
+Groq exposes an OpenAI-compatible endpoint, so it is reached through the
+OpenAI-compatible implementation rather than a bespoke one. The protocol exists
+so the graph never depends on a vendor, and so tests can script responses
+without a network call.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class LLMClient(Protocol):
+    """Returns raw model output for a strict JSON schema request.
+
+    Deliberately returns text rather than a parsed object. Malformed JSON is a
+    validation failure handled by the graph's retry-then-abstain path, not an
+    exception thrown from inside the client.
+    """
+
+    model_id: str
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, Any], schema_name: str
+    ) -> str: ...
+
+
+class OpenAICompatibleClient:
+    """Any OpenAI-compatible chat completions endpoint, including Groq."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 3000,
+        timeout: float = 90.0,
+    ) -> None:
+        from openai import OpenAI
+
+        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self.model_id = model
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, Any], schema_name: str
+    ) -> str:
+        response = self._client.chat.completions.create(
+            model=self.model_id,
+            # Temperature 0 for reproducibility and debuggability. It does not
+            # reduce hallucination; the validator does that.
+            temperature=self._temperature,
+            max_completion_tokens=self._max_tokens,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+
+class ScriptedClient:
+    """Returns queued responses in order. For tests, never for production."""
+
+    def __init__(self, responses: list[str], model_id: str = "scripted") -> None:
+        self._responses = list(responses)
+        self.model_id = model_id
+        self.calls: list[tuple[str, str]] = []
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, Any], schema_name: str
+    ) -> str:
+        self.calls.append((system, user))
+        if not self._responses:
+            raise AssertionError("ScriptedClient ran out of responses")
+        return self._responses.pop(0)

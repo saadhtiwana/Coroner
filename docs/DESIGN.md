@@ -525,6 +525,7 @@ delivery failure cannot lose the record:
 | `proposed_action` | the fix offered |
 | `abstained` | whether it reached `INSUFFICIENT_CONTEXT` |
 | `actual_cause` | the true cause, recorded by whoever resolved the incident |
+| `shadow_rating` | in shadow mode, whether the human would have approved |
 
 ### 5.2 Ground truth
 
@@ -600,6 +601,38 @@ A failure type stays in shadow mode, where Coroner posts diagnoses but offers no
 approve button, until it clears its section 2.4 prediction over at least 20
 incidents. This makes section 2's committed predictions load-bearing rather than
 decorative: they are the gate on shipping.
+
+**The bootstrap problem.** As stated, that rule cannot be satisfied. Promotion
+requires 20 labelled incidents, the label in section 5.2 is the approve or
+reject decision, and shadow mode renders no approve button. A failure type in
+shadow mode would therefore accumulate zero labels and remain in shadow mode
+permanently, which is not a conservative default but a deadlock.
+
+**Resolution: rating and approval are separate acts.** In shadow mode the
+message carries a rating control asking "would you have approved this?", with
+answers `would_approve`, `would_reject`, and `unsure`, written to
+`shadow_rating`. It authorises nothing. Nothing executes. It is a judgement
+about the diagnosis, recorded at the moment the human has the incident in front
+of them and can cheaply say whether Coroner was right.
+
+That yields the label without granting the action, so promotion is reachable
+while the safety property, that no mutation occurs without a real approval keyed
+to a diagnosis, is untouched.
+
+Two consequences worth stating:
+
+**Rating and approval are stored in different fields and never merged.** A
+rating is cheap and hypothetical; an approval carries consequence and is made
+under different incentives. A human who says they would have approved has not
+borne the risk of being wrong, so ratings are expected to run optimistic
+relative to real approvals. Collapsing them into one column would hide exactly
+that bias. After promotion, the gap between a class's shadow rating rate and its
+subsequent approval rate is itself a useful measurement, and it is only
+available because the two were kept apart.
+
+**Abstentions are rated too.** In shadow mode an `INSUFFICIENT_CONTEXT` outcome
+still asks whether abstaining was the right call, which is the same signal
+described in 5.3 and feeds the same metric.
 
 ---
 

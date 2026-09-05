@@ -638,6 +638,106 @@ described in 5.3 and feeds the same metric.
 
 ## 6. Decisions made without input
 
-No entries yet. This section records choices made unilaterally during
-implementation that a reviewer might reasonably have wanted to make themselves,
-so they are visible rather than buried in commit history.
+Choices made unilaterally that a reviewer might reasonably have wanted to make
+themselves, recorded here so they are visible rather than buried in commit
+history. All entries below are ratified and implemented.
+
+### 6.1 The three MVP failure types
+
+**Decision:** CrashLoopBackOff, ImagePullBackOff, and OOMKilled.
+
+Chosen without being specified. They were picked to span the recoverability
+range rather than to be the three most common: one class where the cause is
+fully present in the structured context, one where the fact is certain but the
+cause is not recoverable from a single snapshot, and one bounded entirely by
+application log quality. A set chosen purely by frequency would likely have
+included Pending or unschedulable and would have made section 2's honest
+assessment less informative, because the classes would not have differed in the
+dimension that matters.
+
+**Ratified as implemented.**
+
+### 6.2 Keeping the 64Mi StartError capture as a fourth fixture
+
+**Decision:** `fixtures/oom-startError/` is retained as a distinct incident,
+making four fixtures for three failure types.
+
+It was produced by accident while trying to record a canonical OOMKilled: at a
+64Mi limit the container was killed during runtime init rather than during
+execution, yielding `StartError` with exit code 128 and surfacing as
+`CrashLoopBackOff`, instead of `OOMKilled` with 137. The obvious move was to
+discard it as a bad capture. It was kept because it is the only concrete proof
+that a classifier keyed on exit code 137 misses a real and reachable OOM case,
+and because it demonstrates that the surface `waiting.reason` does not identify
+the failure type. It is now the evidence behind that claim in section 2.2.
+
+**Ratified as implemented.**
+
+### 6.3 SQLite for the accuracy ledger
+
+**Decision:** the section 5 ledger is SQLite, brain-side, schema-versioned and
+append-only.
+
+No storage was specified. SQLite was chosen because the ledger is small,
+single-writer, and read almost exclusively by one process, and because a file
+that can be copied and inspected with standard tools keeps the ledger honest in
+a way a hosted service does not. It is also consistent with section 1's refusal
+to become an observability platform: reaching for Postgres or a time-series
+store would invite the ledger to grow into general queryability, which is
+explicitly not its job.
+
+**Ratified as implemented.**
+
+### 6.4 Implementation order
+
+**Decision:** ImagePullBackOff first, then CrashLoopBackOff, then OOMKilled.
+
+The first choice was made unilaterally; the ordering of the remaining two was
+raised in review and confirmed. The rationale, including the risk that a
+pipeline validated only on a near-deterministic class hardens invisible
+assumptions, is in section 2.5.
+
+**Ratified as implemented.**
+
+### 6.5 Read-only RBAC until an execution path exists
+
+**Decision:** `deploy/manifests/rbac.yaml` grants only get, list, and watch. No
+write verbs exist anywhere in the deployed configuration.
+
+The design requires approval before mutation, and it would have been reasonable
+to define the full permission set now and rely on the approval gate to police
+it. Granting nothing instead makes an unapproved mutation impossible rather than
+merely disallowed, which is a stronger guarantee than any code path can offer,
+and it means a defect in the approval logic during development cannot damage a
+cluster. Write verbs are added in the phase that implements approval-gated
+execution, not before.
+
+**Ratified as implemented.**
+
+### 6.6 Resolving the Phase 0 and Phase 1 instruction conflict
+
+**Decision:** Phase 1's scaffold instruction was treated as superseding Phase
+0's standing prohibitions, so the project directory was created and `git init`
+was run.
+
+Phase 0 ended with an explicit instruction not to create the project directory
+and not to run `git init`. Phase 1 then required a Go module, a Python package,
+fixtures, and per-commit history, none of which are possible without both. The
+prohibitions were read as scoped to Phase 0, where the task was diagnostics
+only, rather than as standing constraints.
+
+A related conflict was resolved the other way. Phase 1 asked for the kind config
+at `deploy/kind-cluster.yaml` while the same message repeated the prohibition on
+creating the project directory. At that point nothing else required the
+directory, so the narrower reading was available and was taken: the file was
+staged outside the repository and the prohibition was honoured until Phase 1
+proper. The general rule applied in both cases is that an explicit instruction
+to produce something overrides an earlier prohibition only when the instruction
+cannot otherwise be satisfied.
+
+One structural consequence: the root commit, `bf67cb9`, which installs the
+commit-msg hook, is on `main` rather than on `chore/scaffold`. A branch requires
+a merge base and empty commits are prohibited, so the first commit could not
+itself sit on the phase branch.
+
+**Ratified as implemented.**

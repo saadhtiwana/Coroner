@@ -1,0 +1,60 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - copyloopvar
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+    - wrapcheck
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    revive:
+      rules:
+        - name: exported
+          arguments: ["disableStutteringCheck"]
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Test helpers legitimately ignore errors and repeat themselves.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+          - wrapcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/saadhtiwana/coroner

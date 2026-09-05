@@ -124,9 +124,9 @@ type Logs struct {
 
 // NodeSummary can reframe a pod-level problem as a node-level one.
 type NodeSummary struct {
-	Name          string `json:"name"`
-	Ready         bool   `json:"ready"`
-	MemoryPressure bool  `json:"memory_pressure"`
-	DiskPressure   bool  `json:"disk_pressure"`
-	PIDPressure    bool  `json:"pid_pressure"`
+	Name           string `json:"name"`
+	Ready          bool   `json:"ready"`
+	MemoryPressure bool   `json:"memory_pressure"`
+	DiskPressure   bool   `json:"disk_pressure"`
+	PIDPressure    bool   `json:"pid_pressure"`
 }

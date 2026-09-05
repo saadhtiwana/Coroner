@@ -1,0 +1,115 @@
+{
+  "contract_version": "1",
+  "incident_id": "inc-ed08935f9bee",
+  "collected_at": "2026-09-06T00:26:46.567526+05:00",
+  "failure_type": "ImagePullBackOff",
+  "pod": {
+    "namespace": "default",
+    "name": "probe-imagepull",
+    "uid": "a0839ff8-4ad6-4e7d-a4fc-f4cf9f030c39",
+    "node_name": "coroner-worker2",
+    "phase": "Pending",
+    "created_at": "2026-09-05T23:51:34+05:00",
+    "age_seconds": 2112.567526
+  },
+  "container": {
+    "name": "puller",
+    "image": "ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0",
+    "image_id": "",
+    "ready": false,
+    "restart_count": 0,
+    "waiting_reason": "ImagePullBackOff",
+    "waiting_message": "Back-off pulling image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": ErrImagePull: failed to pull and unpack image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to resolve reference \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Asaadhtiwana%2Fcoroner-does-not-exist%3Apull&service=ghcr.io: 403 Forbidden",
+    "has_liveness_probe": false,
+    "has_readiness_probe": false,
+    "crashes_per_minute": 0
+  },
+  "events": [
+    {
+      "type": "Normal",
+      "reason": "Scheduled",
+      "message": "Successfully assigned default/probe-imagepull to coroner-worker2",
+      "count": 1,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-05T23:51:34+05:00",
+      "occurrences": 1,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-05T23:51:34+05:00"
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulling",
+      "message": "Pulling image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\"",
+      "count": 5,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-05T23:54:44+05:00",
+      "occurrences": 5,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-05T23:54:44+05:00",
+      "aggregated": "x5 over 3m10s"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Failed to pull image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to pull and unpack image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to resolve reference \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\": failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Asaadhtiwana%2Fcoroner-does-not-exist%3Apull&service=ghcr.io: 403 Forbidden",
+      "count": 5,
+      "first_timestamp": "2026-09-05T23:51:35+05:00",
+      "last_timestamp": "2026-09-05T23:54:45+05:00",
+      "occurrences": 5,
+      "first_seen": "2026-09-05T23:51:35+05:00",
+      "last_seen": "2026-09-05T23:54:45+05:00",
+      "aggregated": "x5 over 3m10s"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Error: ErrImagePull",
+      "count": 5,
+      "first_timestamp": "2026-09-05T23:51:35+05:00",
+      "last_timestamp": "2026-09-05T23:54:45+05:00",
+      "occurrences": 5,
+      "first_seen": "2026-09-05T23:51:35+05:00",
+      "last_seen": "2026-09-05T23:54:45+05:00",
+      "aggregated": "x5 over 3m10s"
+    },
+    {
+      "type": "Normal",
+      "reason": "BackOff",
+      "message": "Back-off pulling image \"ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0\"",
+      "count": 153,
+      "first_timestamp": "2026-09-05T23:51:36+05:00",
+      "last_timestamp": "2026-09-06T00:26:36+05:00",
+      "occurrences": 153,
+      "first_seen": "2026-09-05T23:51:36+05:00",
+      "last_seen": "2026-09-06T00:26:36+05:00",
+      "aggregated": "x153 over 35m0s"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Error: ImagePullBackOff",
+      "count": 153,
+      "first_timestamp": "2026-09-05T23:51:36+05:00",
+      "last_timestamp": "2026-09-06T00:26:36+05:00",
+      "occurrences": 153,
+      "first_seen": "2026-09-05T23:51:36+05:00",
+      "last_seen": "2026-09-06T00:26:36+05:00",
+      "aggregated": "x153 over 35m0s"
+    }
+  ],
+  "logs": {
+    "available": false,
+    "empty": true,
+    "from_previous": false,
+    "truncated": false,
+    "content": ""
+  },
+  "node": {
+    "name": "coroner-worker2",
+    "ready": true,
+    "memory_pressure": false,
+    "disk_pressure": false,
+    "pid_pressure": false
+  },
+  "redacted_count": 0
+}

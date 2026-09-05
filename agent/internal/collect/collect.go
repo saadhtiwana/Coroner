@@ -303,13 +303,15 @@ func (c *Collector) collectLogs(ctx context.Context, pod *corev1.Pod, container 
 
 	out := contract.Logs{}
 
+	// A body that is really a retrieval failure counts as unavailable, not as
+	// a log, so the fallback to the current container still gets a chance.
 	body, err := c.Logs.Fetch(ctx, pod.Namespace, pod.Name, container, true, tail)
-	if err == nil {
+	if err == nil && !isRuntimeFailureBody(body) {
 		out.Available = true
 		out.FromPrev = true
 	} else {
 		body, err = c.Logs.Fetch(ctx, pod.Namespace, pod.Name, container, false, tail)
-		if err == nil {
+		if err == nil && !isRuntimeFailureBody(body) {
 			out.Available = true
 			out.FromPrev = false
 		}

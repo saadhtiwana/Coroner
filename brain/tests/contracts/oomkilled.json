@@ -1,0 +1,118 @@
+{
+  "contract_version": "1",
+  "incident_id": "inc-e4b5f5b6e9c8",
+  "collected_at": "2026-09-06T00:26:46.577124+05:00",
+  "failure_type": "OOMKilled",
+  "pod": {
+    "namespace": "default",
+    "name": "probe-oom",
+    "uid": "951174a9-f07b-44f0-a610-bda02ef89013",
+    "node_name": "coroner-worker",
+    "phase": "Running",
+    "created_at": "2026-09-05T23:51:34+05:00",
+    "age_seconds": 2112.577124
+  },
+  "container": {
+    "name": "hog",
+    "image": "docker.io/library/redis:alpine",
+    "image_id": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+    "ready": false,
+    "restart_count": 11,
+    "command": [
+      "/bin/sh",
+      "-c"
+    ],
+    "args": [
+      "echo \"[startup] report-worker booting\"\nchunk=$(head -c 16777216 /dev/zero | tr '\\0' 'x')\nacc=\"\"; i=0\nwhile [ $i -lt 40 ]; do acc=\"$acc$chunk\"; i=$((i+1)); echo \"[index] segment $i (~$((i*16))MiB)\"; done\nsleep 3600\n"
+    ],
+    "waiting_reason": "CrashLoopBackOff",
+    "waiting_message": "back-off 5m0s restarting failed container=hog pod=probe-oom_default(951174a9-f07b-44f0-a610-bda02ef89013)",
+    "last_terminated": {
+      "exit_code": 137,
+      "reason": "OOMKilled",
+      "started_at": "2026-09-06T00:22:43+05:00",
+      "finished_at": "2026-09-06T00:22:43+05:00"
+    },
+    "memory_limit": "128Mi",
+    "memory_request": "128Mi",
+    "has_liveness_probe": false,
+    "has_readiness_probe": false,
+    "crashes_per_minute": 0.31241462974395057
+  },
+  "events": [
+    {
+      "type": "Normal",
+      "reason": "Scheduled",
+      "message": "Successfully assigned default/probe-oom to coroner-worker",
+      "count": 1,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-05T23:51:34+05:00",
+      "occurrences": 1,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-05T23:51:34+05:00"
+    },
+    {
+      "type": "Normal",
+      "reason": "Started",
+      "message": "Container started",
+      "count": 9,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:07:29+05:00",
+      "occurrences": 9,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:07:29+05:00",
+      "aggregated": "x9 over 15m55s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Created",
+      "message": "Container created",
+      "count": 10,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:12:36+05:00",
+      "occurrences": 10,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:12:36+05:00",
+      "aggregated": "x10 over 21m2s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+      "count": 12,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:22:43+05:00",
+      "occurrences": 12,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:22:43+05:00",
+      "aggregated": "x12 over 31m9s"
+    },
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container hog in pod probe-oom_default(951174a9-f07b-44f0-a610-bda02ef89013)",
+      "count": 31,
+      "first_timestamp": "2026-09-05T23:51:36+05:00",
+      "last_timestamp": "2026-09-06T00:26:45+05:00",
+      "occurrences": 31,
+      "first_seen": "2026-09-05T23:51:36+05:00",
+      "last_seen": "2026-09-06T00:26:45+05:00",
+      "aggregated": "x31 over 35m9s"
+    }
+  ],
+  "logs": {
+    "available": true,
+    "empty": false,
+    "from_previous": true,
+    "truncated": false,
+    "content": "[startup] report-worker booting\n[index] segment 1 (~16MiB)\n[index] segment 2 (~32MiB)\n[index] segment 3 (~48MiB)\n"
+  },
+  "node": {
+    "name": "coroner-worker",
+    "ready": true,
+    "memory_pressure": false,
+    "disk_pressure": false,
+    "pid_pressure": false
+  },
+  "redacted_count": 0
+}

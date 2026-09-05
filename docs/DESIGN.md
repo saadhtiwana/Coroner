@@ -44,6 +44,9 @@ The boundary matters because it bounds the context problem. Coroner sees one
 pod, at one moment, through the API server. Section 2 is an honest accounting of
 what that is and is not sufficient to explain.
 
+Section 7 adds a second constraint of the same weight: the system must be
+evaluable by a stranger in under five minutes.
+
 ### Non-negotiable invariant
 
 No mutation of cluster state occurs without a recorded human approval keyed to a
@@ -741,3 +744,138 @@ a merge base and empty commits are prohibited, so the first commit could not
 itself sit on the phase branch.
 
 **Ratified as implemented.**
+### 6.7 Groq for the reasoning model, reached through an OpenAI-compatible client
+
+**Decision:** the brain calls `openai/gpt-oss-120b` on Groq, through the
+OpenAI-compatible client rather than a bespoke one.
+
+This entry supersedes an earlier one recorded in the same section. When a Gemini
+key was offered, the decision was Anthropic, on three grounds: the evidence
+validator in section 4.2 depends on reliable structured output and is not where
+an unexercised SDK belongs; an aggressively rate-limited free tier would truncate
+the 20-incident promotion evaluation in section 5.5 and corrupt the ledger; and
+`model_id` is recorded per diagnosis so a later switch stays cheap **provided it
+is logged rather than defaulted into**. That decision was then reversed by
+direction in favour of Groq. It is recorded here rather than edited away, because
+a decision log that quietly replaces its own entries is not a log.
+
+Two of the three original reasons survive the reversal and are not resolved by
+it. Groq's free tier is rate limited, so section 5.5's evaluation must be run in
+a way that tolerates interruption, and a truncated evaluation must be discarded
+rather than averaged. Structured output was the other concern, and it turned out
+to be well founded in a specific way: Groq's strict mode rejects the schema
+Pydantic generates by default, requiring `additionalProperties: false` on every
+nested object including those under `$defs`, and every property listed in
+`required`. That is handled once in `schema.py` rather than discovered on a live
+incident.
+
+The third reason is what makes the reversal acceptable. `model_id` and
+`prompt_version` are columns on every ledger row, so diagnoses produced by either
+provider remain attributable and comparable, and a future switch back costs
+nothing in history.
+
+**Model choice.** Of the models Groq serves, most are not candidates at all:
+Whisper is speech recognition, Orpheus is text to speech, Prompt-Guard and
+gpt-oss-safeguard are safety classifiers, and Allam is Arabic-specific. That
+leaves `gpt-oss-120b`, `gpt-oss-20b`, `qwen3.8-27b`, and `groq/compound`.
+`groq/compound` is an agentic system with built-in tool use, which is the wrong
+shape for a deterministic single-shot structured call and introduces
+nondeterminism the validator would have to fight. `gpt-oss-120b` is the largest
+of the remainder and has the most headroom for a six-field schema containing a
+nested citation array.
+
+**Reliability is not assumed.** The requirement was a model whose JSON is
+parseable under load, and that has not yet been measured across enough calls to
+claim. The pipeline is therefore built so it does not depend on the claim:
+unparseable output is handled on exactly the same path as a failed citation
+check, one retry then `INSUFFICIENT_CONTEXT`. A model that returns malformed JSON
+degrades to abstention, never to a wrong diagnosis reaching a human. Measured
+parse-failure rates belong in the section 5 ledger once there are enough
+incidents to compute them.
+
+The key lives in `brain/.env`, which is gitignored, with `brain/.env.example`
+carrying the variable names and no values.
+
+**Ratified as implemented.**
+
+### 6.8 Rebuilding the Phase 2 branch after a failed isolation check
+
+**Decision:** the Phase 2 branch was reset with `git reset --mixed main` and
+recommitted, rather than repaired with follow-up commits.
+
+The per-commit isolation check found two defects. `go.mod` and `go.sum` were
+never staged, so the commit introducing the informer imports could not build on
+its own. The Go and Python halves of the contract changed in different commits,
+and because a test compares the two declarations directly, every commit between
+them failed.
+
+Nothing had been pushed. The standing rule against rewriting history protects
+published history, and a local reset before any push is not what it guards
+against. The alternative, leaving permanently broken commits and stacking
+fix-ups on top, would have made the isolation guarantee false forever. All six
+rebuilt commits verify in isolation.
+
+The isolation check runs per commit from here on, before any merge.
+
+**Ratified as implemented.**
+
+---
+
+## 7. Evaluability
+
+**Coroner must be evaluable in under five minutes by someone who has never seen
+it.** This is a scope requirement with the same standing as the safety
+invariant in section 1, not a packaging nicety deferred to the end.
+
+### 7.1 The rationale
+
+The failure mode for a project like this is not that the code is bad. It is that
+nobody gets far enough to see it run.
+
+An incident-response agent is unusually exposed to that failure. It cannot be
+demonstrated with a screenshot or a code snippet, because the interesting
+behaviour only appears when a real workload breaks in a real cluster. Every
+additional step between a stranger and that moment, a cluster to provision, an
+image to build, a manifest to edit, a Slack app to register, multiplies the
+number of people who conclude it is not worth the effort and never form a view
+of whether the reasoning is any good.
+
+That cost is asymmetric. A reviewer who abandons setup does not report a neutral
+result; they report nothing, and the project reads as unfinished. The work in
+sections 2 through 5 is only worth doing if someone reaches it.
+
+### 7.2 Requirements, all due before Phase 7
+
+**`make demo` is the whole product.** One command creates a kind cluster,
+deploys Coroner, breaks one pod per failure type, and prints the diagnoses. The
+only required configuration is a single API key environment variable. No Slack,
+no manifests to edit, no image build.
+
+**Output sinks are pluggable, and stdout is the default.** Slack is opt-in
+through configuration and is never a prerequisite for seeing the system work.
+This is the single most important item on the list: registering a Slack app,
+scoping a bot token, and wiring interactivity takes longer than everything else
+here combined, and putting it in the critical path would mean nobody sees a
+diagnosis without first doing the least interesting work in the project.
+
+The architectural consequence is that Slack is one implementation of an output
+interface rather than the output path. The approval gate is a property of the
+agent, which holds the credentials, not of the transport that carries the
+question, so a stdout sink can present the same gate without weakening the
+invariant in section 1.
+
+**Images are published to ghcr.io by CI.** Nobody builds anything to try it. The
+local side-load path in the Makefile stays, because it is how development
+iterates without a registry round-trip, but it is not on the path a stranger
+takes.
+
+**A single-file install manifest, applied by URL.** For someone who wants
+Coroner in a cluster they already have, without cloning the repository.
+
+### 7.3 What this rules out
+
+Configuration that must be edited before first run. A required secret beyond the
+one model key. A build step. A demo that assumes an existing cluster, or that
+leaves one behind without a documented teardown. Any path where the first
+observable output is a stack trace from missing configuration rather than a
+diagnosis.

@@ -1,0 +1,130 @@
+{
+  "contract_version": "1",
+  "incident_id": "inc-724422944ca9",
+  "collected_at": "2026-09-06T00:26:46.548126+05:00",
+  "failure_type": "CrashLoopBackOff",
+  "pod": {
+    "namespace": "default",
+    "name": "orders-api-844b496d95-pjk2h",
+    "uid": "37381191-c527-4291-98ee-a0a88d21d5f1",
+    "node_name": "coroner-worker2",
+    "phase": "Running",
+    "created_at": "2026-09-05T23:51:34+05:00",
+    "age_seconds": 2112.548126
+  },
+  "owner": {
+    "kind": "Deployment",
+    "name": "orders-api",
+    "image": "redis:alpine",
+    "revision": "1"
+  },
+  "container": {
+    "name": "orders-api",
+    "image": "docker.io/library/redis:alpine",
+    "image_id": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+    "ready": false,
+    "restart_count": 11,
+    "command": [
+      "/bin/sh",
+      "-c"
+    ],
+    "args": [
+      "echo \"[startup] orders-api booting\"\necho \"[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders\"\necho \"[startup] establishing connection pool (size=10)\"\nsleep 2\necho \"[error]   dial tcp 10.96.31.14:5432: connect: connection refused\" >&2\necho \"[fatal]   could not initialise connection pool after 1 attempt\" >&2\nexit 1\n"
+    ],
+    "waiting_reason": "CrashLoopBackOff",
+    "waiting_message": "back-off 5m0s restarting failed container=orders-api pod=orders-api-844b496d95-pjk2h_default(37381191-c527-4291-98ee-a0a88d21d5f1)",
+    "last_terminated": {
+      "exit_code": 1,
+      "reason": "Error",
+      "started_at": "2026-09-06T00:23:14+05:00",
+      "finished_at": "2026-09-06T00:23:16+05:00"
+    },
+    "memory_limit": "64Mi",
+    "memory_request": "32Mi",
+    "cpu_limit": "100m",
+    "cpu_request": "50m",
+    "env_names": [
+      "DATABASE_URL",
+      "LOG_LEVEL"
+    ],
+    "has_liveness_probe": false,
+    "has_readiness_probe": false,
+    "crashes_per_minute": 0.31241891811935935
+  },
+  "events": [
+    {
+      "type": "Normal",
+      "reason": "Scheduled",
+      "message": "Successfully assigned default/orders-api-844b496d95-pjk2h to coroner-worker2",
+      "count": 1,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-05T23:51:34+05:00",
+      "occurrences": 1,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-05T23:51:34+05:00"
+    },
+    {
+      "type": "Normal",
+      "reason": "Started",
+      "message": "Container started",
+      "count": 9,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:07:42+05:00",
+      "occurrences": 9,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:07:42+05:00",
+      "aggregated": "x9 over 16m8s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Created",
+      "message": "Container created",
+      "count": 10,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:12:46+05:00",
+      "occurrences": 10,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:12:46+05:00",
+      "aggregated": "x10 over 21m12s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+      "count": 12,
+      "first_timestamp": "2026-09-05T23:51:34+05:00",
+      "last_timestamp": "2026-09-06T00:23:14+05:00",
+      "occurrences": 12,
+      "first_seen": "2026-09-05T23:51:34+05:00",
+      "last_seen": "2026-09-06T00:23:14+05:00",
+      "aggregated": "x12 over 31m40s"
+    },
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container orders-api in pod orders-api-844b496d95-pjk2h_default(37381191-c527-4291-98ee-a0a88d21d5f1)",
+      "count": 30,
+      "first_timestamp": "2026-09-05T23:51:40+05:00",
+      "last_timestamp": "2026-09-06T00:25:41+05:00",
+      "occurrences": 30,
+      "first_seen": "2026-09-05T23:51:40+05:00",
+      "last_seen": "2026-09-06T00:25:41+05:00",
+      "aggregated": "x30 over 34m1s"
+    }
+  ],
+  "logs": {
+    "available": true,
+    "empty": false,
+    "from_previous": true,
+    "truncated": false,
+    "content": "[startup] orders-api booting\n[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders\n[startup] establishing connection pool (size=10)\n[error]   dial tcp 10.96.31.14:5432: connect: connection refused\n[fatal]   could not initialise connection pool after 1 attempt\n"
+  },
+  "node": {
+    "name": "coroner-worker2",
+    "ready": true,
+    "memory_pressure": false,
+    "disk_pressure": false,
+    "pid_pressure": false
+  },
+  "redacted_count": 0
+}

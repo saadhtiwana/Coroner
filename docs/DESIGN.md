@@ -224,9 +224,39 @@ Falsification criteria, to be evaluated against the section 5 ledger:
 - If CrashLoopBackOff exceeds 80 percent, the sample is almost certainly biased
   toward well-instrumented applications and should not be generalised.
 
-Ordering consequence: ImagePullBackOff is implemented first. It is the class
-where correctness is verifiable, which makes it the right vehicle for proving
-the pipeline before the hard reasoning problem is attempted.
+### 2.5 Implementation order
+
+**ImagePullBackOff is implemented first, because it is the only class where
+correctness is externally verifiable.** The registry either has the image or it
+does not, and the event message states which. That makes it possible to tell
+whether the pipeline itself works, independently of whether the reasoning is any
+good: if Coroner gets this class wrong, the defect is in collection, parsing,
+transport, or rendering, not in judgement. No other class offers that
+separation, and building the pipeline against a class where every failure is
+ambiguous would mean debugging two unknowns at once.
+
+**The second class implemented is CrashLoopBackOff, not OOMKilled.** This is
+deliberate and it is the less comfortable choice.
+
+A pipeline validated only against a near-deterministic class accumulates
+assumptions that its author cannot see, precisely because nothing in that class
+violates them. Concretely, ImagePullBackOff never exercises: an empty or
+unretrievable log body, a diagnosis with no single determined answer, a
+confidence ceiling below 0.9, the abstention path, or a case where the evidence
+supports two hypotheses equally. Every one of those is routine in
+CrashLoopBackOff, and several are the mechanisms section 4 depends on. A design
+whose abstention path has never run is a design whose abstention path does not
+work.
+
+Taking CrashLoopBackOff second forces those paths open while the architecture is
+still cheap to change. Taking it last would mean discovering, after both easier
+classes have hardened their assumptions into the code, that the hardest and most
+valuable class does not fit the shape that was built for them.
+
+OOMKilled is third. It is the class most likely to be honestly answered with
+"insufficient context to distinguish a leak from a low limit", which is a
+conclusion worth reaching with the abstention machinery already proven by
+CrashLoopBackOff rather than being built for the first time to serve it.
 
 ---
 

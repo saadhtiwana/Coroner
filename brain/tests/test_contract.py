@@ -59,6 +59,7 @@ def test_contract_round_trips() -> None:
         "contract_version": CONTRACT_VERSION,
         "incident_id": "inc-1",
         "collected_at": now,
+        "failure_type": "CrashLoopBackOff",
         "pod": {
             "namespace": "default",
             "name": "orders-api-0",

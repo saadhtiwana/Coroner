@@ -19,6 +19,12 @@ type Contract struct {
 	IncidentID      string    `json:"incident_id"`
 	CollectedAt     time.Time `json:"collected_at"`
 
+	// FailureType is the classified shape, not the pod's surface waiting
+	// reason. The two differ: the recorded fixtures show CrashLoopBackOff on
+	// the surface for both a database connection failure and a memory limit
+	// too low for container init.
+	FailureType string `json:"failure_type"`
+
 	Pod       Pod         `json:"pod"`
 	Owner     *Owner      `json:"owner,omitempty"`
 	Container Container   `json:"container"`
@@ -28,7 +34,9 @@ type Contract struct {
 
 	// RedactedCount reports how many values were withheld by the redactor, so
 	// the brain can distinguish withheld evidence from absent evidence.
-	RedactedCount int `json:"redacted_count"`
+	// RedactedKinds names the categories withheld, without revealing values.
+	RedactedCount int      `json:"redacted_count"`
+	RedactedKinds []string `json:"redacted_kinds,omitempty"`
 }
 
 // Pod identifies the failing pod. UID is load-bearing: events must be filtered
@@ -55,11 +63,13 @@ type Owner struct {
 
 // Container carries both the symptom (State) and the cause (LastState).
 type Container struct {
-	Name         string `json:"name"`
-	Image        string `json:"image"`
-	ImageID      string `json:"image_id"`
-	Ready        bool   `json:"ready"`
-	RestartCount int32  `json:"restart_count"`
+	Name         string   `json:"name"`
+	Image        string   `json:"image"`
+	ImageID      string   `json:"image_id"`
+	Ready        bool     `json:"ready"`
+	RestartCount int32    `json:"restart_count"`
+	Command      []string `json:"command,omitempty"`
+	Args         []string `json:"args,omitempty"`
 
 	WaitingReason  string `json:"waiting_reason,omitempty"`
 	WaitingMessage string `json:"waiting_message,omitempty"`
@@ -88,24 +98,41 @@ type Container struct {
 // fixtures: 1 (generic application failure), 137 (OOMKilled), 128 (StartError,
 // where container init itself was OOM-killed).
 type Terminated struct {
-	ExitCode   int32     `json:"exit_code"`
-	Reason     string    `json:"reason"`
-	Signal     int32     `json:"signal,omitempty"`
-	Message    string    `json:"message,omitempty"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
+	ExitCode int32  `json:"exit_code"`
+	Reason   string `json:"reason"`
+	Signal   int32  `json:"signal,omitempty"`
+	Message  string `json:"message,omitempty"`
+
+	// StartedAt is nil when the container never started. Kubernetes reports a
+	// zero timestamp there, which serialises as 1970 and reads as a real time
+	// the container was up. Null says what actually happened.
+	StartedAt  *time.Time `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at"`
 }
 
 // Event preserves the fields kubectl uses to render "x5 over 2m42s". Keeping
 // Count, First and Last retains the flap signal that a naive field selection
 // would discard (docs/DESIGN.md section 3.3).
 type Event struct {
-	Type    string    `json:"type"`
-	Reason  string    `json:"reason"`
-	Message string    `json:"message"`
-	Count   int32     `json:"count"`
-	First   time.Time `json:"first_timestamp"`
-	Last    time.Time `json:"last_timestamp"`
+	Type    string `json:"type"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+
+	// Raw fields, preserved as reported. Either representation may be the
+	// populated one depending on which events API wrote the object, so both
+	// are carried rather than collapsed at collection time.
+	Count              int32      `json:"count"`
+	FirstTimestamp     time.Time  `json:"first_timestamp"`
+	LastTimestamp      time.Time  `json:"last_timestamp"`
+	SeriesCount        int32      `json:"series_count,omitempty"`
+	SeriesLastObserved *time.Time `json:"series_last_observed,omitempty"`
+
+	// Normalized across both representations, and the reconstructed kubectl
+	// phrasing, which is what the prompt actually consumes.
+	Occurrences int32     `json:"occurrences"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+	Aggregated  string    `json:"aggregated,omitempty"`
 }
 
 // Logs carries the previous container's output where available.
@@ -129,4 +156,14 @@ type NodeSummary struct {
 	MemoryPressure bool   `json:"memory_pressure"`
 	DiskPressure   bool   `json:"disk_pressure"`
 	PIDPressure    bool   `json:"pid_pressure"`
+}
+
+// TimeOrNil returns a pointer to t, or nil when t is the zero time. Optional
+// timestamps are pointers because encoding/json cannot omit a zero struct, and
+// a zero time.Time serialises as a date in 1970 that reads as real.
+func TimeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }

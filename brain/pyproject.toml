@@ -1,0 +1,60 @@
+[project]
+name = "coroner-brain"
+version = "0.1.0"
+description = "Reasoning service for Coroner: turns a collected evidence contract into a diagnosis and a proposed remediation."
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Malik Saad Hayat", email = "saadhayat799@gmail.com" }]
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "langgraph>=0.2",
+    "pydantic>=2.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.27",
+    "mypy>=1.13",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coroner_brain"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+    "ANN",  # missing annotations, paired with mypy strict
+    "PT",   # pytest style
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_return_any = true
+disallow_any_generics = true
+no_implicit_reexport = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

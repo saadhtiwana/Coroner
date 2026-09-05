@@ -1,0 +1,27 @@
+# Go
+/agent/bin/
+*.test
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build and image artifacts
+/tmp/
+*.tar
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

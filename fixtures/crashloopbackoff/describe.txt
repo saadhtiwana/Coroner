@@ -1,0 +1,69 @@
+Name:             probe-crashloop
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             coroner-worker2/172.21.0.2
+Start Time:       Sat, 05 Sep 2026 23:16:41 +0500
+Labels:           coroner.dev/purpose=fixture
+Annotations:      <none>
+Status:           Running
+IP:               10.244.1.7
+IPs:
+  IP:  10.244.1.7
+Containers:
+  crasher:
+    Container ID:  containerd://747b953d56ace6c48cd393add6b96e476ab73b61bb3f989712d2f3f509f486bc
+    Image:         redis:alpine
+    Image ID:      docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/sh
+      -c
+    Args:
+      echo "[startup] orders-api booting"
+      echo "[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders"
+      echo "[startup] establishing connection pool (size=10)"
+      sleep 2
+      echo "[error]   dial tcp 10.96.31.14:5432: connect: connection refused" >&2
+      echo "[fatal]   could not initialise connection pool after 1 attempt" >&2
+      exit 1
+      
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Sat, 05 Sep 2026 23:18:16 +0500
+      Finished:     Sat, 05 Sep 2026 23:18:18 +0500
+    Ready:          False
+    Restart Count:  4
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-nwgg6 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-nwgg6:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                  From               Message
+  ----     ------     ----                 ----               -------
+  Normal   Scheduled  2m53s                default-scheduler  Successfully assigned default/probe-crashloop to coroner-worker2
+  Normal   Pulled     78s (x5 over 2m53s)  kubelet            spec.containers{crasher}: Container image "redis:alpine" already present on machine and can be accessed by the pod
+  Normal   Created    78s (x5 over 2m53s)  kubelet            spec.containers{crasher}: Container created
+  Normal   Started    78s (x5 over 2m53s)  kubelet            spec.containers{crasher}: Container started
+  Warning  BackOff    0s (x5 over 2m47s)   kubelet            spec.containers{crasher}: Back-off restarting failed container crasher in pod probe-crashloop_default(9e163c88-727f-4399-9b23-008a89f88eac)

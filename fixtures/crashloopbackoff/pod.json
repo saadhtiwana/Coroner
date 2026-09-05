@@ -1,0 +1,223 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"metadata\":{\"annotations\":{},\"labels\":{\"coroner.dev/purpose\":\"fixture\"},\"name\":\"probe-crashloop\",\"namespace\":\"default\"},\"spec\":{\"containers\":[{\"args\":[\"echo \\\"[startup] orders-api booting\\\"\\necho \\\"[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders\\\"\\necho \\\"[startup] establishing connection pool (size=10)\\\"\\nsleep 2\\necho \\\"[error]   dial tcp 10.96.31.14:5432: connect: connection refused\\\" \\u003e\\u00262\\necho \\\"[fatal]   could not initialise connection pool after 1 attempt\\\" \\u003e\\u00262\\nexit 1\\n\"],\"command\":[\"/bin/sh\",\"-c\"],\"image\":\"redis:alpine\",\"imagePullPolicy\":\"Never\",\"name\":\"crasher\"}],\"restartPolicy\":\"Always\",\"terminationGracePeriodSeconds\":1}}\n"
+        },
+        "creationTimestamp": "2026-09-05T18:16:41Z",
+        "generation": 1,
+        "labels": {
+            "coroner.dev/purpose": "fixture"
+        },
+        "name": "probe-crashloop",
+        "namespace": "default",
+        "resourceVersion": "2814",
+        "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "echo \"[startup] orders-api booting\"\necho \"[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders\"\necho \"[startup] establishing connection pool (size=10)\"\nsleep 2\necho \"[error]   dial tcp 10.96.31.14:5432: connect: connection refused\" \u003e\u00262\necho \"[fatal]   could not initialise connection pool after 1 attempt\" \u003e\u00262\nexit 1\n"
+                ],
+                "command": [
+                    "/bin/sh",
+                    "-c"
+                ],
+                "image": "redis:alpine",
+                "imagePullPolicy": "Never",
+                "name": "crasher",
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-nwgg6",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "coroner-worker2",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 1,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "kube-api-access-nwgg6",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:16:41Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:16:41Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:18:19Z",
+                "message": "containers with unready status: [crasher]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:18:19Z",
+                "message": "containers with unready status: [crasher]",
+                "observedGeneration": 1,
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-09-05T18:16:41Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "containerID": "containerd://747b953d56ace6c48cd393add6b96e476ab73b61bb3f989712d2f3f509f486bc",
+                "image": "docker.io/library/redis:alpine",
+                "imageID": "docker.io/library/import-2026-09-05@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+                "lastState": {
+                    "terminated": {
+                        "containerID": "containerd://747b953d56ace6c48cd393add6b96e476ab73b61bb3f989712d2f3f509f486bc",
+                        "exitCode": 1,
+                        "finishedAt": "2026-09-05T18:18:18Z",
+                        "reason": "Error",
+                        "startedAt": "2026-09-05T18:18:16Z"
+                    }
+                },
+                "name": "crasher",
+                "ready": false,
+                "resources": {},
+                "restartCount": 4,
+                "started": false,
+                "state": {
+                    "waiting": {
+                        "message": "back-off 1m20s restarting failed container=crasher pod=probe-crashloop_default(9e163c88-727f-4399-9b23-008a89f88eac)",
+                        "reason": "CrashLoopBackOff"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            6,
+                            10,
+                            11,
+                            20,
+                            26,
+                            27
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-nwgg6",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.21.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.21.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.244.1.7",
+        "podIPs": [
+            {
+                "ip": "10.244.1.7"
+            }
+        ],
+        "qosClass": "BestEffort",
+        "resources": {},
+        "startTime": "2026-09-05T18:16:41Z"
+    }
+}

@@ -1,0 +1,335 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "1615",
+                "uid": "c38530de-0aa2-4fcb-9257-2ec95c3d274a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:10:00Z",
+            "message": "Successfully assigned default/probe-crashloop to coroner-worker2",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-crashloop.18d27f255d589bd4",
+                "namespace": "default",
+                "resourceVersion": "1618",
+                "uid": "f109fca5-e9bc-4544-a2c2-0f3ec620c7d0"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 7,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "1616",
+                "uid": "c38530de-0aa2-4fcb-9257-2ec95c3d274a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:51Z",
+            "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-crashloop.18d27f25765b8e4a",
+                "namespace": "default",
+                "resourceVersion": "2397",
+                "uid": "b1e6d229-8e0c-49d8-816c-cf72004e9ddb"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 7,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "1616",
+                "uid": "c38530de-0aa2-4fcb-9257-2ec95c3d274a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:51Z",
+            "message": "Container created",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-crashloop.18d27f2578a2aee3",
+                "namespace": "default",
+                "resourceVersion": "2398",
+                "uid": "e0a63fd1-519d-4ae4-b44b-770740ccbe6c"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 7,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:00Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "1616",
+                "uid": "c38530de-0aa2-4fcb-9257-2ec95c3d274a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:51Z",
+            "message": "Container started",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:00Z",
+                "name": "probe-crashloop.18d27f257c32785e",
+                "namespace": "default",
+                "resourceVersion": "2399",
+                "uid": "9b8fce99-2ae8-43d5-a7fe-10469d9b9df4"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 9,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:10:06Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "1616",
+                "uid": "c38530de-0aa2-4fcb-9257-2ec95c3d274a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:15:53Z",
+            "message": "Back-off restarting failed container crasher in pod probe-crashloop_default(c38530de-0aa2-4fcb-9257-2ec95c3d274a)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:10:06Z",
+                "name": "probe-crashloop.18d27f26ce6d1417",
+                "namespace": "default",
+                "resourceVersion": "2404",
+                "uid": "11a1f1ef-003f-478e-8ebc-fed594d56c89"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:16:41Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "2499",
+                "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:16:41Z",
+            "message": "Successfully assigned default/probe-crashloop to coroner-worker2",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:16:41Z",
+                "name": "probe-crashloop.18d27f82a753c461",
+                "namespace": "default",
+                "resourceVersion": "2501",
+                "uid": "30fd76fd-9e7c-487c-a1a4-5e8bf3cd490e"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:16:41Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "2500",
+                "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:18:16Z",
+            "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:16:41Z",
+                "name": "probe-crashloop.18d27f82bebe3b3a",
+                "namespace": "default",
+                "resourceVersion": "2683",
+                "uid": "5a55638b-3277-4a28-ba8f-582c08c1d59d"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:16:41Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "2500",
+                "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:18:16Z",
+            "message": "Container created",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:16:41Z",
+                "name": "probe-crashloop.18d27f82bf3cc10a",
+                "namespace": "default",
+                "resourceVersion": "2685",
+                "uid": "4cceb4e3-ee11-41f5-a921-1ea6eedc1648"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:16:41Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "2500",
+                "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:18:16Z",
+            "message": "Container started",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:16:41Z",
+                "name": "probe-crashloop.18d27f82c218c4b5",
+                "namespace": "default",
+                "resourceVersion": "2686",
+                "uid": "de02792e-e289-48c2-be78-edf7069a07f1"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 5,
+            "eventTime": null,
+            "firstTimestamp": "2026-09-05T18:16:47Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{crasher}",
+                "kind": "Pod",
+                "name": "probe-crashloop",
+                "namespace": "default",
+                "resourceVersion": "2500",
+                "uid": "9e163c88-727f-4399-9b23-008a89f88eac"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-09-05T18:19:34Z",
+            "message": "Back-off restarting failed container crasher in pod probe-crashloop_default(9e163c88-727f-4399-9b23-008a89f88eac)",
+            "metadata": {
+                "creationTimestamp": "2026-09-05T18:16:47Z",
+                "name": "probe-crashloop.18d27f8410a13079",
+                "namespace": "default",
+                "resourceVersion": "2813",
+                "uid": "2a410cbe-f798-4bc7-9021-2cf9821cb6b3"
+            },
+            "reason": "BackOff",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "coroner-worker2",
+            "source": {
+                "component": "kubelet",
+                "host": "coroner-worker2"
+            },
+            "type": "Warning"
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

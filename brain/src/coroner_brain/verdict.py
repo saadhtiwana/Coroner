@@ -36,6 +36,8 @@ class DiagnoseResponse(BaseModel):
 
     abstained: bool = False
     abstain_reason: str = ""
+    discarded: bool = False
+    discard_reason: str = ""
     approvable: bool = False
     validation_failures: list[str] = []
 

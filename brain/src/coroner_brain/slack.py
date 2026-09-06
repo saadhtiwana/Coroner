@@ -192,6 +192,15 @@ def render_blocks(notice: Notice, status: list[str] | None = None) -> list[dict[
         )
         return blocks
 
+    if v.discarded:
+        blocks.append(
+            _section(
+                "*Decision*  the model did not answer, so no diagnosis exists. Nothing to "
+                "approve or rate. Recorded as DISCARDED and excluded from accuracy."
+            )
+        )
+        return blocks
+
     if v.abstained:
         blocks.append(
             _section(
@@ -269,6 +278,8 @@ def summary_text(notice: Notice) -> str:
     head = (
         f"Coroner: {v.failure_type} in {notice.contract.pod.namespace}/{notice.contract.pod.name}"
     )
+    if v.discarded:
+        return f"{head}: discarded, the model did not answer"
     if v.abstained:
         return f"{head}: insufficient context"
     return f"{head}: {v.root_cause}"

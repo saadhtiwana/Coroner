@@ -143,6 +143,13 @@ def render_observed(contract: Contract) -> list[str]:
 
 def render_inferred(verdict: DiagnoseResponse) -> list[str]:
     """Model output. Everything here is a claim, not a fact."""
+    if verdict.discarded:
+        return [
+            f"outcome       {verdict.outcome.value}   evidence class {verdict.evidence_class}",
+            "root cause    not attempted: the model did not answer",
+            f"reason        {verdict.discard_reason}",
+            "proposal      none. This incident is recorded and not scored.",
+        ]
     if verdict.abstained:
         return [
             f"outcome       {verdict.outcome.value}   evidence class {verdict.evidence_class}",
@@ -170,6 +177,12 @@ def render_decision(notice: Notice) -> list[str]:
     v = notice.verdict
     url = f"{notice.public_url}/incidents/{v.incident_id}"
     post = f"curl -s -X POST {url}"
+
+    if v.discarded:
+        return [
+            "nothing to approve or rate. The model did not answer and no diagnosis exists.",
+            "the incident is recorded as DISCARDED and excluded from accuracy.",
+        ]
 
     if v.abstained:
         return [
@@ -260,7 +273,12 @@ def verdict_from_row(row: dict[str, Any], threshold: float) -> DiagnoseResponse:
         confidence_ceiling=ceiling(EvidenceClass(evidence_class)) if evidence_class else None,
         abstained=abstained,
         abstain_reason=str(row.get("abstain_reason") or ""),
-        approvable=(not abstained) and final is not None and float(final) >= threshold,
+        discarded=str(row.get("outcome")) == Outcome.DISCARDED.value,
+        discard_reason=str(row.get("discard_reason") or ""),
+        approvable=(not abstained)
+        and str(row.get("outcome")) != Outcome.DISCARDED.value
+        and final is not None
+        and float(final) >= threshold,
         validation_failures=list(json.loads(row.get("validation_failures") or "[]")),
     )
 

@@ -30,6 +30,11 @@ ABSTENTION_THRESHOLD = 0.5
 # A response that fails validation is retried once, then abstains.
 MAX_VALIDATION_RETRIES = 1
 
+# Wall clock for the whole diagnose-and-validate loop, retries included. A
+# call that does not answer in time is recorded as DISCARDED rather than left
+# hanging, so an evaluation run cannot stall on one incident.
+MODEL_DEADLINE_SECONDS = 180.0
+
 # Output sink. stdout is the default and needs no configuration; Slack is
 # opt-in and is never a prerequisite for seeing the system work. Section 7.2.
 DEFAULT_SINK = "stdout"
@@ -51,6 +56,7 @@ class Settings:
     ledger_path: Path
     abstention_threshold: float
     max_validation_retries: int
+    model_deadline_seconds: float
 
     sink: str
     public_url: str
@@ -107,6 +113,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ),
         max_validation_retries=int(
             os.environ.get("CORONER_MAX_VALIDATION_RETRIES", MAX_VALIDATION_RETRIES)
+        ),
+        model_deadline_seconds=float(
+            os.environ.get("CORONER_MODEL_DEADLINE_SECONDS", MODEL_DEADLINE_SECONDS)
         ),
         sink=os.environ.get("CORONER_SINK", DEFAULT_SINK).strip().lower() or DEFAULT_SINK,
         public_url=os.environ.get("CORONER_PUBLIC_URL", DEFAULT_PUBLIC_URL).rstrip("/"),

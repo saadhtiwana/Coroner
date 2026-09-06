@@ -38,11 +38,19 @@ class OpenAICompatibleClient:
         model: str,
         temperature: float = 0.0,
         max_tokens: int = 3000,
-        timeout: float = 90.0,
+        timeout: float = 60.0,
+        max_retries: int = 1,
     ) -> None:
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        # One retry, not the SDK's default of two, and a per-request timeout
+        # well inside the pipeline's deadline. Recorded live: a single call
+        # reached 999 seconds of wall clock through retries and backoff. The
+        # graph's deadline is the bound that matters; these keep the client
+        # from spending that budget on its own.
+        self._client = OpenAI(
+            api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries
+        )
         self.model_id = model
         self._temperature = temperature
         self._max_tokens = max_tokens

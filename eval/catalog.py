@@ -315,25 +315,38 @@ CRASHLOOP: list[Incident] = [
         log_shape="no_logs",
     ),
     _crash(
-        "crash-self-sigkill",
-        "the process sends itself SIGKILL; exit 137 with no memory limit and no OOM",
-        "sleep 1\nkill -9 $$\n",
+        # Exit codes in the 128-plus-signal range, no output, no memory
+        # limit. Written as a literal exit rather than a real self signal:
+        # the kernel does not deliver SIGKILL to PID 1 from inside its own
+        # namespace, so a container whose shell signals itself cannot
+        # produce this. What Coroner sees is identical either way, with one
+        # difference stated rather than hidden: a real signal kill would
+        # also populate lastState.terminated.signal.
+        #
+        # 137 with a generic reason is the case that exercises the
+        # classifier's exit-code corroboration rule, which exists for
+        # runtimes that report a memory kill without saying so. Here there
+        # is no memory limit at all, so calling it an OOM is wrong, and the
+        # evaluation should say so if it does.
+        "crash-exit-137-no-limit",
+        "exit 137, the conventional SIGKILL code, with no memory limit set and no output",
+        "sleep 1\nexit 137\n",
         Rubric(),
         diagnosable=False,
         log_shape="no_logs",
     ),
     _crash(
-        "crash-self-sigsegv",
-        "the process sends itself SIGSEGV; exit 139, no output",
-        "sleep 1\nkill -SEGV $$\n",
+        "crash-exit-139-no-output",
+        "exit 139, the conventional SIGSEGV code, with no output",
+        "sleep 1\nexit 139\n",
         Rubric(),
         diagnosable=False,
         log_shape="no_logs",
     ),
     _crash(
-        "crash-self-sigterm",
-        "the process sends itself SIGTERM; exit 143, no output",
-        "sleep 1\nkill -TERM $$\n",
+        "crash-exit-143-no-output",
+        "exit 143, the conventional SIGTERM code, with no output",
+        "sleep 1\nexit 143\n",
         Rubric(),
         diagnosable=False,
         log_shape="no_logs",

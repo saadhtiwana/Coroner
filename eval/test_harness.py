@@ -112,3 +112,17 @@ def test_oom_why_is_scored_as_correct_declined_or_wrong() -> None:
     )
     assert declined["oom_why"] == "declined"
     assert declined["oom_what"]
+
+
+def test_no_script_relies_on_a_dollar_kubernetes_would_eat() -> None:
+    """Recorded: three incidents never ran what they were written to run.
+
+    Kubernetes expands ``$(VAR)`` in container args and treats ``$$`` as the
+    escape for a literal dollar. A script written with ``kill -9 $$`` reached
+    the shell as ``kill -9 $``, which busybox refused, so the container
+    exited 1 with a shell error on stdout instead of dying on a signal with
+    nothing. The evidence was wrong and the catalogue's stated truth was
+    wrong with it, which would have scored a correct diagnosis as a miss.
+    """
+    for inc in ALL:
+        assert "$$" not in inc.script, f"{inc.id}: Kubernetes will collapse $$ to $"

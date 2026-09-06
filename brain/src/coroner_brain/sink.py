@@ -14,12 +14,14 @@ affordance is rendered at all; not disabled, absent. Control 4.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol, TextIO
+from typing import Any, Literal, Protocol, TextIO
 
 from coroner_brain.contract import Contract, Event
+from coroner_brain.diagnosis import Citation, Outcome
 from coroner_brain.verdict import DiagnoseResponse
 
 Mode = Literal["shadow", "live"]
@@ -230,6 +232,75 @@ def render_text(notice: Notice) -> str:
         "=" * 72,
     ]
     return "\n".join(parts) + "\n"
+
+
+# ------------------------------------------------------------- from a row
+
+
+def verdict_from_row(row: dict[str, Any], threshold: float) -> DiagnoseResponse:
+    """Rebuild the verdict a ledger row recorded."""
+    from coroner_brain.evidence import EvidenceClass, ceiling
+
+    evidence_class = str(row.get("evidence_class") or "")
+    final = row.get("confidence_final")
+    abstained = bool(row.get("abstained"))
+    return DiagnoseResponse(
+        incident_id=str(row["incident_id"]),
+        failure_type=str(row["failure_type"]),
+        outcome=Outcome(str(row["outcome"])),
+        evidence_class=evidence_class,
+        context_hash=str(row.get("context_hash") or ""),
+        root_cause=str(row.get("root_cause") or ""),
+        explanation=str(row.get("explanation") or ""),
+        proposed_action=str(row.get("proposed_action") or ""),
+        competing_hypothesis=str(row.get("competing_hypothesis") or ""),
+        evidence=[Citation.model_validate(c) for c in json.loads(row.get("evidence_json") or "[]")],
+        confidence_model=row.get("confidence_model"),
+        confidence_final=final,
+        confidence_ceiling=ceiling(EvidenceClass(evidence_class)) if evidence_class else None,
+        abstained=abstained,
+        abstain_reason=str(row.get("abstain_reason") or ""),
+        approvable=(not abstained) and final is not None and float(final) >= threshold,
+        validation_failures=list(json.loads(row.get("validation_failures") or "[]")),
+    )
+
+
+def notice_from_row(
+    row: dict[str, Any], *, threshold: float, mode: Mode, public_url: str
+) -> Notice | None:
+    """Rebuild the delivered notice from a ledger row. None if the row predates
+    schema 3 and holds no contract."""
+    raw = row.get("contract_json") or ""
+    if not raw:
+        return None
+    return Notice(
+        contract=Contract.model_validate_json(raw),
+        verdict=verdict_from_row(row, threshold),
+        mode=mode,
+        deadline=None,
+        public_url=public_url,
+    )
+
+
+def render_status(row: dict[str, Any]) -> list[str]:
+    """What has been recorded against the row since delivery."""
+    lines: list[str] = []
+    decision = row.get("decision")
+    if decision:
+        when = str(row.get("decision_at") or "")[:19].replace("T", " ")
+        if decision == "rejected":
+            lines.append(f"rejected at {when}: {row.get('decision_reason') or ''}")
+        elif decision == "edited":
+            lines.append(f"edited at {when}, action to execute: {row.get('decision_action') or ''}")
+        elif decision == "expired":
+            lines.append(f"expired at {when} with no decision")
+        else:
+            lines.append(f"{decision} at {when}")
+    if row.get("shadow_rating"):
+        lines.append(f"rated: {row['shadow_rating']}")
+    if row.get("actual_cause"):
+        lines.append(f"actual cause recorded: {row['actual_cause']}")
+    return lines
 
 
 # --------------------------------------------------------------------- sinks

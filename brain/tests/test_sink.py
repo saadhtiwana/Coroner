@@ -145,3 +145,55 @@ def test_stdout_sink_writes_the_whole_message(imagepull: Contract) -> None:
     assert text.index("OBSERVED") < text.index("INFERRED") < text.index("DECISION")
     assert "403 Forbidden" in text
     assert imagepull.incident_id in text
+
+
+def test_a_notice_is_rebuilt_from_the_ledger_row(imagepull: Contract, tmp_path: object) -> None:
+    """After a decision the message can be re-rendered from the row alone."""
+    import json
+    from pathlib import Path
+
+    from coroner_brain.graph import DiagnosisPipeline
+    from coroner_brain.ledger import Ledger
+    from coroner_brain.llm import ScriptedClient
+    from coroner_brain.sink import notice_from_row, render_status
+
+    assert isinstance(tmp_path, Path)
+    ledger = Ledger(tmp_path / "l.sqlite3")
+    payload = imagepull.model_dump(mode="json")
+    answer = json.dumps(
+        {
+            "root_cause": "The image cannot be pulled.",
+            "explanation": "The kubelet reported a pull failure.",
+            "proposed_action": "Fix the image reference.",
+            "confidence": 0.9,
+            "evidence": [
+                {
+                    "source": "container",
+                    "field": "container.image",
+                    "value": payload["container"]["image"],
+                }
+            ],
+            "competing_hypothesis": "",
+        }
+    )
+    DiagnosisPipeline(client=ScriptedClient([answer]), ledger=ledger).run(imagepull)
+    ledger.label(imagepull.incident_id, decision="rejected", decision_reason="creds, not tag")
+    row = ledger.get(imagepull.incident_id)
+    assert row is not None
+
+    notice = notice_from_row(row, threshold=0.5, mode="live", public_url="http://b")
+    assert notice is not None
+    assert notice.contract.incident_id == imagepull.incident_id
+    assert notice.verdict.root_cause == "The image cannot be pulled."
+    assert notice.verdict.confidence_final == 0.9
+    assert notice.verdict.confidence_ceiling == 0.95
+    assert notice.verdict.evidence[0].field == "container.image"
+    text = render_text(notice)
+    assert "403 Forbidden" in text
+    assert "The image cannot be pulled." in text
+    assert render_status(row) == [
+        f"rejected at {row['decision_at'][:19].replace('T', ' ')}: creds, not tag"
+    ]
+
+    row["contract_json"] = ""
+    assert notice_from_row(row, threshold=0.5, mode="live", public_url="http://b") is None

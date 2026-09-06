@@ -221,5 +221,6 @@ class DiagnosisPipeline:
             confidence_final=None if abstained else state.get("confidence_final"),
             validation_failures=state.get("validation_failures") or [],
             validation_retries=max(0, state.get("attempts", 0) - 1),
+            contract_json=json.dumps(state.get("payload") or {}, sort_keys=True, default=str),
         )
         self._ledger.record(entry)

@@ -157,3 +157,24 @@ def test_a_version_one_ledger_is_migrated_in_place(tmp_path: object) -> None:
     assert row["approval_token"] == "tok"
     # Reopening does not re-run the migration or fail on existing columns.
     assert Ledger(path).schema_version() == SCHEMA_VERSION
+
+
+def test_the_row_holds_the_contract_it_was_diagnosed_from(
+    imagepull: object, ledger: Ledger
+) -> None:
+    """Section 5.3: a real outcome paired with the exact evidence held at the time."""
+    import json
+
+    from coroner_brain.contract import Contract
+    from coroner_brain.graph import DiagnosisPipeline
+    from coroner_brain.llm import ScriptedClient
+
+    assert isinstance(imagepull, Contract)
+    DiagnosisPipeline(client=ScriptedClient([]), ledger=ledger).run(
+        imagepull.model_copy(update={"failure_type": "CrashLoopBackOff"})
+    )
+    row = ledger.get(imagepull.incident_id)
+    assert row is not None
+    stored = json.loads(row["contract_json"])
+    assert stored["incident_id"] == imagepull.incident_id
+    assert stored["container"]["image"] == imagepull.container.image

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Columns added after version 1, applied with ALTER TABLE on an existing file
 # so a ledger recorded under the old schema keeps its rows. Append-only
@@ -30,6 +30,13 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         # HMAC over the approval, keyed to this diagnosis. The agent will not
         # execute an action whose token it cannot verify. Section 1.
         "ALTER TABLE diagnoses ADD COLUMN approval_token TEXT",
+    ),
+    3: (
+        # The evidence contract exactly as diagnosed, so the row is the
+        # section 5.3 corpus entry: a real outcome paired with the evidence
+        # held at the time. It also lets any sink re-render the message
+        # from the row alone after a decision.
+        "ALTER TABLE diagnoses ADD COLUMN contract_json TEXT NOT NULL DEFAULT ''",
     ),
 }
 
@@ -65,7 +72,13 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     decision_reason   TEXT,
     shadow_rating     TEXT,
     actual_cause      TEXT,
-    resolved_within_sla INTEGER
+    resolved_within_sla INTEGER,
+
+    -- Schema 2 and 3. Listed here for fresh files; added by migration to
+    -- files created under an earlier schema.
+    decision_action   TEXT,
+    approval_token    TEXT,
+    contract_json     TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -105,6 +118,7 @@ class LedgerEntry:
     confidence_final: float | None = None
     validation_failures: list[str] = field(default_factory=list)
     validation_retries: int = 0
+    contract_json: str = ""
 
 
 class Ledger:

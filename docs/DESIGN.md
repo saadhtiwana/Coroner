@@ -460,9 +460,15 @@ Indicative ceilings, to be recalibrated against section 5 data:
 | --- | --- |
 | ImagePullBackOff with registry error in event | 0.95 |
 | OOMKilled, reason and limits present | 0.90 for "what", 0.50 for "why" |
+| OOMKilled during init (StartError, exit 128), runtime message or a pod event names memory | 0.80 |
+| OOMKilled during init, nothing in the evidence names memory | 0.15, routed to abstention |
 | CrashLoopBackOff, previous logs contain a fatal line | 0.80 |
 | CrashLoopBackOff, previous logs present, no clear error | 0.40 |
 | CrashLoopBackOff, logs unavailable | 0.15, routed to abstention |
+
+The two init rows were added after Phase 3 (section 6.9). Before them the
+StartError shape fell through to the running OOM row and a diagnosis resting on
+one runtime string and no logs was capped at the same 0.90 as a kernel verdict.
 
 These ceilings encode section 2's predictions directly, which means section 5's
 measurements test the ceilings and the predictions together.
@@ -819,6 +825,111 @@ The isolation check runs per commit from here on, before any merge.
 
 **Ratified as implemented.**
 
+### 6.9 An explicit ceiling for the init OOM shape
+
+**Decision:** `OOMKilledDuringInit` has its own evidence classes and ceilings,
+0.80 when the runtime message or a pod event names memory and 0.15 otherwise,
+instead of sharing the running OOM's 0.90.
+
+Found by re-running the recorded 2Mi incident: it scored 0.90 with seven valid
+citations on a contract whose logs were retrieved and empty. Every citation
+checked out and the diagnosis was correct. The ceiling was still wrong, because
+it was not earned by the evidence class; there was no row for StartError with
+exit 128, so `classify_evidence` filed it with `OOMKilled` and the running OOM
+ceiling applied by default. A ceiling that is reached by fall-through is not a
+ceiling.
+
+The value is 0.80 rather than 0.90 for a reason that is specific to the
+evidence, not to the diagnosis. A running OOM carries the kernel's verdict in
+a structured field, `lastState.terminated.reason = OOMKilled`, and usually a
+log that stops mid-stream. An init kill carries neither. Its entire causal
+signal is one free-text runtime message, and section 6.10 records that the
+runtime does not word that message consistently. A diagnosis resting on a
+single unstable string sits below one resting on a kernel verdict, and level
+with one resting on an application's own fatal log line. It is not lower than
+0.80 because when the string is present it is verbatim and unambiguous, in the
+same way a registry response is. Re-run under the new row: model 0.95, final
+0.80, seven citations, approvable. The section 5 calibration data is what
+decides whether 0.80 is right; this is the first value with a stated reason.
+
+The second row exists for the case where the agent classified an init kill but
+nothing in the contract names memory. That can only happen if the agent and the
+brain disagree about what counts as a marker, which they must not, so it is a
+guard rather than a path. It abstains before any model call.
+
+**Ratified as implemented.**
+
+### 6.10 The agent corroborates an init kill from the pod's own events
+
+**Decision:** when the latest termination is an init failure (`StartError` or
+`ContainerCannotRun`) and any event for the same pod UID names memory, the agent
+classifies `OOMKilledDuringInit` under the rule `event-message-names-oom`. The
+refinement is narrow: a container that ran and exited is never reclassified by
+an old memory event.
+
+Recorded 2026-09-06 on the same 2Mi container across consecutive restarts. The
+runtime reported `container init was OOM-killed (memory limit too low?)` for
+some kills and `error during container init: procReady not received` for
+others, with no change to the workload. A classifier reading only the latest
+termination message filed the second wording as an ordinary CrashLoopBackOff
+with exit 128 and empty logs, and the brain's gate abstained on it. The pod's
+event history, filtered by UID so it belongs to this incarnation and no other,
+retained the earlier wording.
+
+This is also the first organic abstention. The recording is kept as
+`brain/tests/contracts/starterror-procready.json` and the gate is required to
+abstain on it without a model call. Section 8 records why one is not enough.
+
+Two consequences. The incident id is now derived after events are collected,
+because it includes the failure type. Watch-mode deduplication still keys on
+the classification made before collection, so the seen-set and the contract
+can name different types for the same occurrence; this is recorded in section
+8 rather than fixed, because fixing it means collecting logs on every informer
+update.
+
+**Ratified as implemented.**
+
+### 6.11 The prompt says what confidence means
+
+**Decision:** the prompt defines `confidence` as confidence that `root_cause`
+is correct as stated, and says that an open question downstream of a proven
+fact belongs in `competing_hypothesis`, not in a lowered score. Prompt version
+2.
+
+The second Phase 3 question was whether ImagePullBackOff at 0.6 against a 0.95
+ceiling meant the model was underconfident or the section 2.4 prediction was
+wrong. Re-run twice on the recorded contract: 0.7, then 0.9 under the new
+prompt, and 0.95 on a fresh live capture. The diagnosis text was correct each
+time, named the 403, and presented both branches. The prediction was not wrong;
+the model was scoring the branch question it had been told it could not
+answer, because nothing had told it which question the number was for. The fix
+is the prompt, which is what section 2.4 said it would be, and the falsification
+criterion is about accuracy over incidents, which the section 5 harness measures,
+not about a self-reported score on one.
+
+Section 4.3 still applies. The prompt makes the model's number more useful; the
+ceiling is what makes it safe.
+
+**Ratified as implemented.**
+
+### 6.12 The validator compares citations as the model saw them
+
+**Decision:** cited values are compared against the JSON rendering of the
+contract field, and a citation path split across `source` and `field` is
+joined before resolution. The value check is unchanged.
+
+Two rejections recorded live on correct image pull diagnoses. A bare pod's
+contract said `"owner": null`; the model cited `owner` with the value `null`;
+Python rendered `None` as an empty string and rejected it, twice, and a correct
+diagnosis went to `INSUFFICIENT_CONTEXT`. Separately the model wrote
+`source: events[2], field: message`, which is the schema's own path with the
+prefix in the wrong box, and was rejected for a field that did not exist. Both
+are the validator rejecting packaging rather than fabrication. Neither change
+accepts a value the contract does not hold: the null owner is compared against
+`null`, and the joined path still has to resolve and still has to match.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability
@@ -879,3 +990,53 @@ one model key. A build step. A demo that assumes an existing cluster, or that
 leaves one behind without a documented teardown. Any path where the first
 observable output is a stack trace from missing configuration rather than a
 diagnosis.
+
+---
+
+## 8. Open items
+
+Things known to be unresolved. Each names what would resolve it.
+
+**One organic abstention is not evidence the gate works.** Across the four
+recorded incidents every `INSUFFICIENT_CONTEXT` was constructed by stripping
+logs from a contract that had them. The first organic case arrived on
+2026-09-06 (section 6.10), and it is one case. The gate has not been exercised
+on a CrashLoopBackOff whose logs are present but name nothing, which is the
+middle row of the section 2.3 table and the largest hallucination bucket.
+Resolved by the section 5 harness, which must include that row.
+
+**The running OOM ceiling collapses "what" and "why".** The table in 4.2 gives
+`OOMKilled` two numbers, 0.90 for the fact and 0.50 for the cause, and the code
+applies one, 0.90, to a diagnosis that carries a proposed action. The action
+rests on the cause. Recorded live: a 128Mi runtime OOM was diagnosed at 0.90,
+approvable, with a proposed action to raise the limit and a competing
+hypothesis saying the evidence could not rule out a leak. That is the shape
+section 2.2 said Coroner should decline to choose in. Not changed yet because
+the alternative, capping at 0.50, lands every running OOM exactly on the
+approval threshold and makes the outcome depend on a comparison operator.
+Resolved by section 5 calibration data: if approved OOM actions resolve at a
+rate closer to 0.50 than 0.90, the ceiling moves to 0.50 and the threshold
+comparison is settled deliberately.
+
+**Watch-mode deduplication keys on the pre-collection classification.** After
+section 6.10 the contract's failure type can differ from the type the seen-set
+recorded for the same occurrence. Harmless today, since the id only gates
+re-emission, but it means an incident id in the agent's log can differ from the
+one in the contract. Resolved by deduplicating on the emitted contract, at the
+cost of collecting on every informer update, or by a cheaper pre-collection
+event lookup.
+
+**Model latency is not bounded.** One image pull call on 2026-09-06 took 999
+seconds of wall clock including client retries, against a 90 second per-request
+timeout. Groq's free tier rate limits, and the OpenAI client retries on 429
+with backoff. Section 6.7 said the section 5 evaluation must tolerate
+interruption; this is the measurement behind that sentence. Resolved by the
+harness recording per-call latency and treating a truncated run as discarded.
+
+**Temperature 0 is not reproducible across runs.** The same recorded image
+pull contract scored 0.6, 0.7, and 0.9 on three runs, the last under a changed
+prompt but the first two under the same one. Section 4.2 control 7 already says
+temperature does not reduce hallucination; it also does not deliver
+determinism on this provider. The ledger records `model_id` and
+`prompt_version` per row, so the variance is measurable. Resolved by reporting
+it, not by pretending it is zero.

@@ -137,3 +137,47 @@ func TestHealth(t *testing.T) {
 		t.Errorf("health = %+v", h)
 	}
 }
+
+func TestApprovedAndReports(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.RequestURI())
+		switch {
+		case r.URL.Path == "/incidents/approved":
+			_, _ = w.Write([]byte(`[{"incident_id":"inc-1","failure_type":"OOMKilled","context_hash":"h","decision":"approved","decision_action":"raise","decision_at":"t","approval_token":"v1.x","contract_json":"{}"}]`))
+		case strings.HasSuffix(r.URL.Path, "/execution"), strings.HasSuffix(r.URL.Path, "/resolution"):
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("bad body: %v", err)
+			}
+			if body["detail"] == nil {
+				t.Errorf("report without detail: %v", body)
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c, _ := New(srv.URL, 0)
+	rows, err := c.Approved(context.Background(), true)
+	if err != nil || len(rows) != 1 || rows[0].ApprovalToken != "v1.x" {
+		t.Fatalf("Approved() = %+v, %v", rows, err)
+	}
+	if err := c.ReportExecution(context.Background(), "inc-1", ExecutionReport{Status: "executed", Detail: "patched"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ReportResolution(context.Background(), "inc-1", ResolutionReport{Resolved: true, Detail: "ready"}); err != nil {
+		t.Fatal(err)
+	}
+	if seen[0] != "GET /incidents/approved?execute=true" {
+		t.Errorf("first request = %s", seen[0])
+	}
+	if _, err := c.Approved(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if seen[len(seen)-1] != "GET /incidents/approved" {
+		t.Errorf("last request = %s", seen[len(seen)-1])
+	}
+}

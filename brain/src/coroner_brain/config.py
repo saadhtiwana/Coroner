@@ -8,6 +8,7 @@ carries no values.
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +66,12 @@ class Settings:
     # not survive a restart, which is logged at startup.
     redis_url: str | None
 
+    # Shared with the agent, which verifies approval tokens with it. When
+    # unset a random per-process secret is used and logged as such: tokens
+    # still bind approvals to diagnoses, but no other process can check them.
+    approval_secret: bytes
+    approval_secret_generated: bool
+
     @property
     def has_credentials(self) -> bool:
         return bool(self.api_key)
@@ -79,6 +86,10 @@ def load_settings(env_file: Path | None = None) -> Settings:
         env_file = Path(__file__).resolve().parents[2] / ".env"
     if env_file.is_file():
         load_dotenv(env_file, override=False)
+
+    raw_secret = os.environ.get("CORONER_APPROVAL_SECRET", "")
+    generated = not raw_secret
+    secret = raw_secret.encode() if raw_secret else secrets.token_bytes(32)
 
     return Settings(
         api_key=os.environ.get("GROQ_API_KEY") or None,
@@ -98,6 +109,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ),
         promoted_types=_csv(os.environ.get("CORONER_PROMOTED_TYPES", "")),
         redis_url=os.environ.get("CORONER_REDIS_URL") or None,
+        approval_secret=secret,
+        approval_secret_generated=generated,
     )
 
 

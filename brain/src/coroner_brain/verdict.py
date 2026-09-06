@@ -20,6 +20,10 @@ class DiagnoseResponse(BaseModel):
     outcome: Outcome
     evidence_class: str
 
+    # Hash of the exact evidence the diagnosis rested on. The approval token
+    # binds to it, so an approval cannot be replayed against other evidence.
+    context_hash: str = ""
+
     root_cause: str = ""
     explanation: str = ""
     proposed_action: str = ""

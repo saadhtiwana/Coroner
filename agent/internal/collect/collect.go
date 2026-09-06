@@ -84,6 +84,13 @@ func (c *Collector) Collect(ctx context.Context, pod *corev1.Pod, containerName 
 
 	var red redact.Result
 
+	// Events are collected first because they can refine the classification:
+	// the runtime's wording for the same kill is not stable across restarts,
+	// and the pod's own event history retains the earlier wording. The
+	// incident id is derived from the refined type, so it is computed after.
+	events := c.collectEvents(ctx, pod, &red)
+	result = classify.WithEvents(result, status, eventMessages(events))
+
 	out := &contract.Contract{
 		ContractVersion: contract.Version,
 		IncidentID:      IncidentID(string(pod.UID), containerName, status.RestartCount, string(result.Type)),
@@ -102,7 +109,7 @@ func (c *Collector) Collect(ctx context.Context, pod *corev1.Pod, containerName 
 	}
 
 	out.Owner = c.resolveOwner(ctx, pod, containerName)
-	out.Events = c.collectEvents(ctx, pod, &red)
+	out.Events = events
 	out.Node = c.collectNode(ctx, pod)
 	out.Logs = c.collectLogs(ctx, pod, containerName, &red)
 
@@ -214,6 +221,14 @@ func (c *Collector) collectEvents(ctx context.Context, pod *corev1.Pod, red *red
 	}
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].LastSeen.Before(out[j].LastSeen) })
+	return out
+}
+
+func eventMessages(events []contract.Event) []string {
+	out := make([]string, 0, len(events))
+	for i := range events {
+		out = append(out, events[i].Message)
+	}
 	return out
 }
 

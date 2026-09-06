@@ -264,3 +264,72 @@ func TestNilInputs(t *testing.T) {
 		t.Errorf("Pod(nil) = %q, want None", got.Type)
 	}
 }
+
+// Recorded live on one 2Mi container across consecutive restarts: the runtime
+// named memory for one kill and reported "procReady not received" for the
+// next. The pod's own events retain the first wording.
+func TestInitFailureIsCorroboratedFromEvents(t *testing.T) {
+	procReady := corev1.ContainerStatus{
+		State: waiting("CrashLoopBackOff", "back-off 2m40s restarting failed container"),
+		LastTerminationState: terminated("StartError", 128,
+			"failed to create containerd task: failed to create shim task: OCI runtime create failed: "+
+				"runc create failed: unable to start container process: error during container init: procReady not received"),
+	}
+	oomEvent := "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: " +
+		"runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)"
+
+	t.Run("latest message alone is an ordinary crash", func(t *testing.T) {
+		got := Container(&procReady)
+		if got.Type != CrashLoopBackOff {
+			t.Fatalf("Type = %q, want %q before events are consulted", got.Type, CrashLoopBackOff)
+		}
+	})
+
+	t.Run("an earlier event naming memory refines it", func(t *testing.T) {
+		got := WithEvents(Container(&procReady), &procReady, []string{
+			"Successfully assigned default/probe-oom-init to coroner-worker",
+			oomEvent,
+			"Back-off restarting failed container tiny in pod probe-oom-init_default(2d68543e)",
+		})
+		if got.Type != OOMKilledDuringInit {
+			t.Fatalf("Type = %q, want %q", got.Type, OOMKilledDuringInit)
+		}
+		if got.Rule != "event-message-names-oom" {
+			t.Errorf("Rule = %q, want event-message-names-oom", got.Rule)
+		}
+		if got.Signals["events.message"] != oomEvent {
+			t.Error("the event that decided the classification should be recorded as a signal")
+		}
+		if got.Signals["lastState.terminated.exitCode"] != "128" {
+			t.Error("the original termination signals should be carried forward")
+		}
+	})
+
+	t.Run("events without a memory marker change nothing", func(t *testing.T) {
+		got := WithEvents(Container(&procReady), &procReady, []string{"Container created", "Back-off restarting"})
+		if got.Type != CrashLoopBackOff {
+			t.Errorf("Type = %q, want %q", got.Type, CrashLoopBackOff)
+		}
+	})
+
+	t.Run("an application crash is not reclassified by a stale memory event", func(t *testing.T) {
+		// The latest termination ran and exited 1. A memory event from an
+		// earlier incarnation of the container must not override that.
+		appCrash := corev1.ContainerStatus{
+			State:                waiting("CrashLoopBackOff", ""),
+			LastTerminationState: terminated("Error", 1, ""),
+		}
+		got := WithEvents(Container(&appCrash), &appCrash, []string{oomEvent})
+		if got.Type != CrashLoopBackOff {
+			t.Errorf("Type = %q, want %q; an exited process is not an init failure", got.Type, CrashLoopBackOff)
+		}
+	})
+
+	t.Run("non-crashloop results pass through", func(t *testing.T) {
+		pull := corev1.ContainerStatus{State: waiting("ImagePullBackOff", "")}
+		got := WithEvents(Container(&pull), &pull, []string{oomEvent})
+		if got.Type != ImagePullBackOff {
+			t.Errorf("Type = %q, want %q", got.Type, ImagePullBackOff)
+		}
+	})
+}

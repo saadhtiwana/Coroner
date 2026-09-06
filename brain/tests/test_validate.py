@@ -6,6 +6,8 @@ is code rather than prompting. These tests are the proof it works.
 
 from __future__ import annotations
 
+import json
+
 from coroner_brain.contract import Contract
 from coroner_brain.diagnosis import Citation, Diagnosis
 from coroner_brain.validate import collected_text, resolve_path, validate
@@ -164,3 +166,79 @@ def test_stripped_logs_cannot_support_a_fabricated_log_citation(oomkilled: Contr
         ],
     )
     assert validate(honest, payload).ok, validate(honest, payload).failures
+
+
+# ------------------------------------------------------ values as the model saw them
+
+
+def test_accepts_a_null_owner_cited_as_null(imagepull: Contract) -> None:
+    """Recorded live against a bare pod.
+
+    The contract the model received said ``"owner": null``. It cited exactly
+    that and was rejected twice, because the validator rendered ``None`` as an
+    empty string, and a correct image pull diagnosis was routed to abstention.
+    """
+    payload = imagepull.model_dump(mode="json")
+    assert payload["owner"] is None
+    diagnosis = _diagnosis(
+        root_cause="The image cannot be pulled and there is no controller to patch.",
+        evidence=[
+            Citation(
+                source="container", field="container.waiting_reason", value="ImagePullBackOff"
+            ),
+            Citation(source="owner", field="owner", value="null"),
+        ],
+    )
+    report = validate(diagnosis, payload)
+    assert report.ok, report.failures
+
+
+def test_booleans_and_lists_are_compared_as_json(crashloop: Contract) -> None:
+    payload = crashloop.model_dump(mode="json")
+    diagnosis = _diagnosis(
+        evidence=[
+            Citation(source="node", field="node.memory_pressure", value="false"),
+            Citation(source="container", field="container.ready", value="false"),
+            Citation(
+                source="container",
+                field="container.command",
+                value=json.dumps(payload["container"]["command"]),
+            ),
+        ],
+    )
+    report = validate(diagnosis, payload)
+    assert report.ok, report.failures
+
+    # A wrong boolean is still wrong.
+    wrong = _diagnosis(
+        evidence=[Citation(source="node", field="node.memory_pressure", value="true")]
+    )
+    assert not validate(wrong, payload).ok
+
+
+def test_path_split_across_source_and_field_still_resolves(imagepull: Contract) -> None:
+    """Recorded live: the model put ``events[2]`` in source and ``message`` in field.
+
+    The path is the same path. It must resolve, and the value must still be
+    checked against what that path holds.
+    """
+    payload = imagepull.model_dump(mode="json")
+    right = _diagnosis(
+        evidence=[
+            Citation(source="events[2]", field="message", value=payload["events"][2]["message"]),
+            Citation(source="container", field="waiting_reason", value="ImagePullBackOff"),
+        ]
+    )
+    assert validate(right, payload).ok, validate(right, payload).failures
+
+    wrong_value = _diagnosis(
+        evidence=[Citation(source="container", field="waiting_reason", value="CrashLoopBackOff")]
+    )
+    report = validate(wrong_value, payload)
+    assert not report.ok
+    assert any("does not match" in f for f in report.failures)
+
+    invented = _diagnosis(evidence=[Citation(source="logs", field="stack_trace", value="x")])
+    report = validate(invented, payload)
+    assert not report.ok
+    assert any("does not exist" in f for f in report.failures)

@@ -11,6 +11,7 @@ A diagnosis that fails here never reaches a human.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -71,6 +72,25 @@ def resolve_path(payload: dict[str, Any], path: str) -> tuple[bool, Any]:
     return True, current
 
 
+def resolve_citation(payload: dict[str, Any], source: str, field: str) -> tuple[bool, Any]:
+    """Resolve a citation, accepting the path split across source and field.
+
+    The schema asks for a full dotted path in ``field`` and a label in
+    ``source``. Recorded live: the model sometimes puts the prefix in
+    ``source`` and the remainder in ``field``, as in ``events[2]`` and
+    ``message``. The path is the same path; only the packaging differs. It is
+    tried whole first, then joined. The value check that follows is unchanged,
+    so a citation is not accepted more readily, only located more readily.
+    """
+    found, value = resolve_path(payload, field)
+    if found:
+        return True, value
+    joined = f"{source.strip()}.{field.strip()}" if source.strip() else field
+    if joined != field:
+        return resolve_path(payload, joined)
+    return False, None
+
+
 def collected_text(payload: dict[str, Any]) -> str:
     """Every piece of free text the agent actually collected, concatenated.
 
@@ -112,6 +132,22 @@ def _normalise(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
+def _render(value: Any) -> str:  # noqa: ANN401 - renders arbitrary contract values
+    """Render a contract value the way the model saw it.
+
+    The model is shown the contract as JSON, so a missing owner appears as
+    ``null``, a flag as ``true`` or ``false``, and a command as a JSON list.
+    Recorded live: a diagnosis cited ``owner`` with the value ``null`` for a
+    bare pod, which is exactly what the contract said, and was rejected twice
+    because Python rendered ``None`` as an empty string. That rejection routed
+    a correct image pull diagnosis to abstention. Strings are left as they are;
+    everything else is rendered as JSON.
+    """
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True, default=str)
+
+
 def _value_matches(cited: str, actual: str) -> bool:
     """Compare a cited value against what the contract holds.
 
@@ -135,13 +171,13 @@ def validate(diagnosis: Diagnosis, payload: dict[str, Any]) -> ValidationReport:
         failures.append("evidence array is empty; a diagnosis must cite the fields it rests on")
 
     for citation in diagnosis.evidence:
-        found, value = resolve_path(payload, citation.field)
+        found, value = resolve_citation(payload, citation.source, citation.field)
         if not found:
             failures.append(f"cited field {citation.field!r} does not exist in the contract")
             continue
 
         cited = _normalise(citation.value)
-        actual = _normalise("" if value is None else str(value))
+        actual = _normalise(_render(value))
         if not cited:
             failures.append(f"citation for {citation.field!r} has an empty value")
             continue

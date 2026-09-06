@@ -135,5 +135,20 @@ def attach_incoming(headers: Mapping[str, str]) -> object:
     return context.attach(propagate.extract(dict(headers)))
 
 
+def capture() -> object:
+    """The current trace context, for handing to a worker thread.
+
+    OpenTelemetry's context is thread-local. A span started on a thread
+    without this becomes the root of its own trace, which is how the model
+    call was orphaned once: the timing was right and the parent was gone.
+    """
+    return context.get_current()
+
+
+def resume(captured: object) -> object:
+    """Continue a captured context on this thread. Returns a detach token."""
+    return context.attach(captured)  # type: ignore[arg-type]
+
+
 def detach(token: object) -> None:
     context.detach(token)  # type: ignore[arg-type]

@@ -30,7 +30,8 @@ from coroner_brain.evidence import EvidenceClass, ceiling, classify_evidence, ga
 from coroner_brain.ledger import Ledger, LedgerEntry
 from coroner_brain.llm import LLMClient, Usage
 from coroner_brain.schema import strict_schema
-from coroner_brain.tracing import annotate, span
+from coroner_brain.tracing import annotate, capture, resume, span
+from coroner_brain.tracing import detach as detach_context
 from coroner_brain.validate import ValidationReport, validate
 
 
@@ -155,7 +156,8 @@ class DiagnosisPipeline:
         attempts = state.get("attempts", 0) + 1
         with span("graph.diagnose", attempt=attempts, retry=attempts > 1) as current:
             result = self._diagnose(state, attempts)
-            current.set_attribute("outcome", result.get("outcome", ""))
+            if result.get("outcome"):
+                current.set_attribute("outcome", result["outcome"])
             confidence = result.get("confidence_model")
             if confidence is not None:
                 current.set_attribute("confidence_model", confidence)
@@ -247,7 +249,13 @@ class DiagnosisPipeline:
         """
         result: queue.Queue[tuple[str | None, BaseException | None]] = queue.Queue(maxsize=1)
 
+        # The call runs on another thread, and the trace context is
+        # thread-local, so it is carried across by hand. Without this the
+        # model span becomes the root of a second trace.
+        parent = capture()
+
         def run() -> None:
+            token = resume(parent)
             try:
                 with span("model.complete", model_id=self._client.model_id) as current:
                     text = self._client.complete_json(
@@ -260,6 +268,8 @@ class DiagnosisPipeline:
                     result.put((text, None))
             except BaseException as exc:  # reported to the caller, not swallowed
                 result.put((None, exc))
+            finally:
+                detach_context(token)
 
         started = self._clock()
         waited_for_limit = 0.0

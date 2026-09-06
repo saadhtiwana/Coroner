@@ -83,6 +83,16 @@ def test_a_diagnosis_trace_carries_the_facts_that_decided_it(
     assert model["prompt_tokens"] == 4000
     assert model["completion_tokens"] == 250
 
+    # The model call runs on a worker thread. Its span must still be part of
+    # this trace: an orphaned span times the call and explains nothing.
+    finished = {s.name: s for s in spans.get_finished_spans()}
+    model_span = finished["model.complete"]
+    diagnose_span = finished["graph.diagnose"]
+    assert model_span.context is not None
+    assert model_span.context.trace_id == diagnose_span.context.trace_id
+    assert model_span.parent is not None
+    assert model_span.parent.span_id == diagnose_span.context.span_id
+
     validate = named["graph.validate"]
     assert validate["validation_ok"] is True
     assert validate["confidence_model"] == 0.95

@@ -55,6 +55,8 @@ type options struct {
 	execute           bool
 	approvalSecret    string
 	remediateInterval time.Duration
+	resolveReadyIn    time.Duration
+	resolveStableFor  time.Duration
 }
 
 func main() {
@@ -88,6 +90,8 @@ func parseFlags() options {
 	flag.BoolVar(&o.execute, "execute", false, "apply approved remediations; off by default, plans are only emitted")
 	flag.StringVar(&o.approvalSecret, "approval-secret", os.Getenv("CORONER_APPROVAL_SECRET"), "secret shared with the brain for verifying approval tokens (env CORONER_APPROVAL_SECRET)")
 	flag.DurationVar(&o.remediateInterval, "remediate-interval", 30*time.Second, "how often to ask the brain for approved incidents")
+	flag.DurationVar(&o.resolveReadyIn, "resolve-ready-within", 10*time.Minute, "window for the workload to reach Ready after an executed action (section 5.2)")
+	flag.DurationVar(&o.resolveStableFor, "resolve-stable-for", 30*time.Minute, "how long the workload must stay Ready to count as resolved (section 5.2)")
 	flag.Parse()
 	return o
 }
@@ -152,11 +156,14 @@ func newRunner(client kubernetes.Interface, h handler, opts options, logger *slo
 	} else {
 		logger.Info("execution is disabled; approved plans will be emitted and not applied")
 	}
+	resolver := remediate.NewResolver(client)
+	resolver.ReadyWithin = opts.resolveReadyIn
+	resolver.StableFor = opts.resolveStableFor
 	runner := &remediate.Runner{
 		Brain:    bh.client,
 		Secret:   []byte(opts.approvalSecret),
 		Executor: remediate.Executor{Client: client, Enabled: opts.execute},
-		Resolver: remediate.NewResolver(client),
+		Resolver: resolver,
 		Logger:   logger,
 		Known:    bh.known,
 	}

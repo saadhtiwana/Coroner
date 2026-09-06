@@ -1,34 +1,49 @@
 # Recreates the recorded OOMKilled incident: a process that grows past a 128Mi
 # limit while running. The kernel sends SIGKILL, so the log stops mid-stream
 # with no fatal line. docs/DESIGN.md section 2.2.
-apiVersion: v1
-kind: Pod
+#
+# A Deployment rather than a bare pod, so that an approved remediation has a
+# controller to patch: a bare pod's resources are immutable and the agent
+# refuses to touch one. The index is 160MiB, so a raised limit of 256Mi lets
+# it finish and the workload reach Ready, which is what resolution tracking
+# measures.
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: probe-oom
+  name: report-worker
   namespace: default
   labels:
     coroner.dev/purpose: probe
 spec:
-  restartPolicy: Always
-  terminationGracePeriodSeconds: 1
-  containers:
-    - name: hog
-      image: redis:alpine
-      imagePullPolicy: Never
-      resources:
-        requests:
-          memory: 128Mi
-        limits:
-          memory: 128Mi
-      command: ["/bin/sh", "-c"]
-      args:
-        - |
-          echo "[startup] report-worker booting"
-          chunk=$(head -c 16777216 /dev/zero | tr '\0' 'x')
-          acc=""; i=0
-          while [ $i -lt 40 ]; do
-            acc="$acc$chunk"; i=$((i+1))
-            echo "[index] segment $i (~$((i*16))MiB)"
-          done
-          echo "[index] build complete"
-          sleep 3600
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-worker
+  template:
+    metadata:
+      labels:
+        app: report-worker
+        coroner.dev/purpose: probe
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: hog
+          image: redis:alpine
+          imagePullPolicy: Never
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 128Mi
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[startup] report-worker booting"
+              chunk=$(head -c 16777216 /dev/zero | tr '\0' 'x')
+              acc=""; i=0
+              while [ $i -lt 10 ]; do
+                acc="$acc$chunk"; i=$((i+1))
+                echo "[index] segment $i (~$((i*16))MiB)"
+              done
+              echo "[index] build complete"
+              sleep 3600

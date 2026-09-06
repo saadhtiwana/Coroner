@@ -23,7 +23,7 @@ help: ## Show available targets
 # ---------------------------------------------------------------- verification
 
 .PHONY: verify
-verify: agent-verify brain-verify ## Run every check both services must pass
+verify: agent-verify brain-verify eval-check ## Run every check both services and the harness must pass
 
 .PHONY: agent-verify
 agent-verify: agent-build agent-vet agent-lint agent-test ## Build, vet, lint and test the agent
@@ -71,6 +71,33 @@ brain-test: ## Run pytest
 .PHONY: brain-run
 brain-run: ## Serve the brain on :8000 with the stdout sink
 	cd $(BRAIN_DIR) && $(UV) run uvicorn coroner_brain.api:app --host 127.0.0.1 --port 8000
+
+# ------------------------------------------------------------------ evaluation
+
+EVAL_OUT ?= eval/results
+
+.PHONY: eval-check
+eval-check: ## Lint, type-check and test the accuracy harness
+	cd $(BRAIN_DIR) && $(UV) run --group dev ruff check ../eval
+	cd $(BRAIN_DIR) && $(UV) run --group dev ruff format --check ../eval
+	cd $(BRAIN_DIR) && $(UV) run --group dev mypy ../eval
+	cd $(BRAIN_DIR) && $(UV) run --group dev pytest -q ../eval
+
+.PHONY: agent-bin
+agent-bin: ## Build the agent binary the harness runs
+	cd $(AGENT_DIR) && $(GO) build -o bin/coroner-agent ./cmd/coroner-agent
+
+.PHONY: eval-collect
+eval-collect: agent-bin ## Create every catalogue incident and capture its contract
+	cd $(BRAIN_DIR) && $(UV) run python ../eval/run.py collect --out ../$(EVAL_OUT)
+
+.PHONY: eval-diagnose
+eval-diagnose: ## Diagnose every captured contract through a running brain, resumably
+	cd $(BRAIN_DIR) && $(UV) run python ../eval/run.py diagnose --out ../$(EVAL_OUT) --ledger ../$(EVAL_OUT)/ledger.sqlite3
+
+.PHONY: eval-score
+eval-score: ## Score the ledger against the catalogue and write the report
+	cd $(BRAIN_DIR) && $(UV) run python ../eval/run.py score --out ../$(EVAL_OUT) --ledger ../$(EVAL_OUT)/ledger.sqlite3
 
 # --------------------------------------------------------------------- cluster
 

@@ -13,6 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import queue
+import re
+import threading
+import time
+from collections.abc import Callable
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -40,11 +45,42 @@ class State(TypedDict, total=False):
     validation_failures: list[str]
     attempts: int
     context_hash: str
+    started_at: float
+    discard_reason: str
 
 
 def _context_hash(payload: dict[str, Any]) -> str:
     blob = json.dumps(payload, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
+
+
+class ModelUnavailableError(RuntimeError):
+    """The model did not answer in time, or the call failed."""
+
+
+# The provider's 429 body says how long to wait, for example "Please try
+# again in 2.219999999s" or "in 1m3.5s". Measured 2026-09-06: the on-demand
+# tier allows 8000 tokens a minute and one contract prompt is about 5000, so
+# a second call inside the same minute is refused with a wait of seconds.
+_RETRY_AFTER = re.compile(
+    r"(?:try again in|retry[- ]after)\s+(?:(\d+)m)?(\d+(?:\.\d+)?)\s*s", re.IGNORECASE
+)
+
+# Never wait on a retry-after longer than this even if the deadline allows,
+# so a provider asking for minutes does not hold a diagnosis hostage.
+MAX_RETRY_AFTER = 90.0
+
+
+def retry_after_seconds(error: BaseException) -> float | None:
+    """Seconds the provider asked us to wait, from a rate limit error, or None."""
+    text = str(error)
+    if "rate limit" not in text.lower() and "429" not in text:
+        return None
+    match = _RETRY_AFTER.search(text)
+    if match is None:
+        return 5.0
+    minutes = int(match.group(1) or 0)
+    return minutes * 60 + float(match.group(2))
 
 
 class DiagnosisPipeline:
@@ -57,11 +93,16 @@ class DiagnosisPipeline:
         ledger: Ledger,
         abstention_threshold: float = 0.5,
         max_retries: int = 1,
+        model_deadline: float = 180.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._client = client
         self._ledger = ledger
         self._threshold = abstention_threshold
         self._max_retries = max_retries
+        self._deadline = model_deadline
+        self._clock = clock
+        self._sleep: Callable[[float], None] = time.sleep
         self._schema = strict_schema(Diagnosis)
         self._graph = self._build()
 
@@ -76,6 +117,7 @@ class DiagnosisPipeline:
             "evidence_class": classify_evidence(contract).value,
             "attempts": 0,
             "validation_failures": [],
+            "started_at": self._clock(),
         }
 
     def evidence_gate(self, state: State) -> State:
@@ -90,15 +132,37 @@ class DiagnosisPipeline:
     def diagnose(self, state: State) -> State:
         contract = state["contract"]
         payload = state["payload"]
-        raw = self._client.complete_json(
-            system=prompts.system_prompt(contract.failure_type),
-            user=prompts.user_prompt(
-                json.dumps(payload, indent=2), state.get("validation_failures") or None
-            ),
-            schema=self._schema,
-            schema_name="diagnosis",
-        )
         attempts = state.get("attempts", 0) + 1
+
+        remaining = self._deadline - (self._clock() - state.get("started_at", self._clock()))
+        if remaining <= 0:
+            return {
+                "attempts": attempts,
+                "outcome": Outcome.DISCARDED.value,
+                "discard_reason": (
+                    f"the model deadline of {self._deadline:.0f}s was already spent before "
+                    f"attempt {attempts}"
+                ),
+            }
+
+        try:
+            raw = self._call_with_deadline(
+                remaining,
+                system=prompts.system_prompt(contract.failure_type),
+                user=prompts.user_prompt(
+                    json.dumps(payload, indent=2), state.get("validation_failures") or None
+                ),
+            )
+        except ModelUnavailableError as exc:
+            # Neither a diagnosis nor an abstention: nothing was reasoned.
+            # Recorded as its own outcome so the gap is visible and the
+            # incident is excluded from accuracy rather than counted as
+            # anything.
+            return {
+                "attempts": attempts,
+                "outcome": Outcome.DISCARDED.value,
+                "discard_reason": str(exc),
+            }
 
         try:
             parsed = Diagnosis.model_validate_json(raw)
@@ -115,6 +179,68 @@ class DiagnosisPipeline:
             }
 
         return {"diagnosis": parsed, "attempts": attempts, "confidence_model": parsed.confidence}
+
+    def _call_with_deadline(self, remaining: float, *, system: str, user: str) -> str:
+        """Run the model call on a thread and give up at the deadline.
+
+        The client has its own timeout and retry budget, but a socket that
+        never answers, or a retry-after the client honours, can outlast them.
+        The thread is a daemon so a call that is never answered cannot keep
+        the process alive; the pipeline stops waiting for it here.
+        """
+        result: queue.Queue[tuple[str | None, BaseException | None]] = queue.Queue(maxsize=1)
+
+        def run() -> None:
+            try:
+                result.put(
+                    (
+                        self._client.complete_json(
+                            system=system, user=user, schema=self._schema, schema_name="diagnosis"
+                        ),
+                        None,
+                    )
+                )
+            except BaseException as exc:  # reported to the caller, not swallowed
+                result.put((None, exc))
+
+        started = self._clock()
+        waited_for_limit = 0.0
+        while True:
+            budget = remaining - (self._clock() - started)
+            if budget <= 0:
+                raise ModelUnavailableError(
+                    f"the model did not answer within the {self._deadline:.0f}s deadline"
+                    + (
+                        f" after waiting {waited_for_limit:.0f}s on rate limits"
+                        if waited_for_limit
+                        else ""
+                    )
+                )
+            threading.Thread(target=run, name="coroner-model-call", daemon=True).start()
+            try:
+                raw, error = result.get(timeout=budget)
+            except queue.Empty:
+                raise ModelUnavailableError(
+                    f"the model did not answer within the {self._deadline:.0f}s deadline"
+                ) from None
+            if error is None:
+                return raw or ""
+
+            # A rate limit with a short wait is not a failure; it is the
+            # provider pacing us. Wait as asked, inside the deadline, and go
+            # again. Anything else, or a wait that would blow the deadline,
+            # is recorded as the discard it is.
+            wait = retry_after_seconds(error)
+            budget = remaining - (self._clock() - started)
+            if wait is None or wait > MAX_RETRY_AFTER or wait + 1.0 > budget:
+                raise ModelUnavailableError(
+                    f"the model call failed: {type(error).__name__}: {error}"
+                ) from error
+            waited_for_limit += wait + 0.5
+            self._sleep(wait + 0.5)
+
+    def discarded(self, state: State) -> State:
+        return {"outcome": Outcome.DISCARDED.value}
 
     def validate_node(self, state: State) -> State:
         diagnosis = state.get("diagnosis")
@@ -151,6 +277,9 @@ class DiagnosisPipeline:
     def _after_gate(self, state: State) -> str:
         return "insufficient" if state.get("outcome") else "diagnose"
 
+    def _after_diagnose(self, state: State) -> str:
+        return "discarded" if state.get("outcome") == Outcome.DISCARDED.value else "validate"
+
     def _after_validate(self, state: State) -> str:
         if state.get("diagnosis") is None or state.get("validation_failures"):
             if state.get("attempts", 0) <= self._max_retries:
@@ -168,6 +297,7 @@ class DiagnosisPipeline:
         graph.add_node("validate", self.validate_node)
         graph.add_node("diagnosed", self.diagnosed)
         graph.add_node("insufficient", self.insufficient)
+        graph.add_node("discarded", self.discarded)
 
         graph.add_edge(START, "classify")
         graph.add_edge("classify", "evidence_gate")
@@ -176,7 +306,11 @@ class DiagnosisPipeline:
             self._after_gate,
             {"diagnose": "diagnose", "insufficient": "insufficient"},
         )
-        graph.add_edge("diagnose", "validate")
+        graph.add_conditional_edges(
+            "diagnose",
+            self._after_diagnose,
+            {"validate": "validate", "discarded": "discarded"},
+        )
         graph.add_conditional_edges(
             "validate",
             self._after_validate,
@@ -184,6 +318,7 @@ class DiagnosisPipeline:
         )
         graph.add_edge("diagnosed", END)
         graph.add_edge("insufficient", END)
+        graph.add_edge("discarded", END)
         return graph.compile()
 
     # ------------------------------------------------------------------ run
@@ -197,6 +332,9 @@ class DiagnosisPipeline:
     def _record(self, contract: Contract, state: State) -> None:
         diagnosis = state.get("diagnosis")
         abstained = state.get("outcome") == Outcome.INSUFFICIENT_CONTEXT.value
+        discarded = state.get("outcome") == Outcome.DISCARDED.value
+        if discarded:
+            diagnosis = None
         entry = LedgerEntry(
             incident_id=contract.incident_id,
             failure_type=contract.failure_type,
@@ -217,10 +355,11 @@ class DiagnosisPipeline:
             evidence=[]
             if abstained or not diagnosis
             else [c.model_dump() for c in diagnosis.evidence],
-            confidence_model=state.get("confidence_model"),
-            confidence_final=None if abstained else state.get("confidence_final"),
+            confidence_model=None if discarded else state.get("confidence_model"),
+            confidence_final=None if abstained or discarded else state.get("confidence_final"),
             validation_failures=state.get("validation_failures") or [],
             validation_retries=max(0, state.get("attempts", 0) - 1),
             contract_json=json.dumps(state.get("payload") or {}, sort_keys=True, default=str),
+            discard_reason=state.get("discard_reason", ""),
         )
         self._ledger.record(entry)

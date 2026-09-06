@@ -17,6 +17,11 @@ class Outcome(StrEnum):
     DIAGNOSED = "DIAGNOSED"
     INSUFFICIENT_CONTEXT = "INSUFFICIENT_CONTEXT"
 
+    # The model did not answer inside the deadline, or the call failed. This
+    # is neither a diagnosis nor an abstention: nothing was reasoned. The row
+    # is recorded so the gap is visible, and it is excluded from accuracy.
+    DISCARDED = "DISCARDED"
+
 
 class Citation(BaseModel):
     """One claim traced to one collected field.

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Columns added after version 1, applied with ALTER TABLE on an existing file
 # so a ledger recorded under the old schema keeps its rows. Append-only
@@ -37,6 +37,11 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         # held at the time. It also lets any sink re-render the message
         # from the row alone after a decision.
         "ALTER TABLE diagnoses ADD COLUMN contract_json TEXT NOT NULL DEFAULT ''",
+    ),
+    4: (
+        # Why a DISCARDED row was discarded: the model did not answer in time
+        # or the call failed. Section 6.16.
+        "ALTER TABLE diagnoses ADD COLUMN discard_reason TEXT NOT NULL DEFAULT ''",
     ),
 }
 
@@ -78,13 +83,21 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     -- files created under an earlier schema.
     decision_action   TEXT,
     approval_token    TEXT,
-    contract_json     TEXT NOT NULL DEFAULT ''
+    contract_json     TEXT NOT NULL DEFAULT '',
+    discard_reason    TEXT NOT NULL DEFAULT ''
 );
 """
 
 
 class UnknownIncidentError(KeyError):
     """No ledger row exists for the incident."""
+
+
+class NotRatableError(ValueError):
+    """A discarded row carries no judgement to rate."""
+
+    def __init__(self, incident_id: str) -> None:
+        super().__init__(f"{incident_id} was discarded; there is no diagnosis to rate")
 
 
 class AlreadyLabelledError(ValueError):
@@ -119,6 +132,7 @@ class LedgerEntry:
     validation_failures: list[str] = field(default_factory=list)
     validation_retries: int = 0
     contract_json: str = ""
+    discard_reason: str = ""
 
 
 class Ledger:
@@ -212,6 +226,8 @@ class Ledger:
             raise AlreadyLabelledError(incident_id, "decision", str(current["decision"]))
         if shadow_rating is not None and current.get("shadow_rating"):
             raise AlreadyLabelledError(incident_id, "shadow_rating", str(current["shadow_rating"]))
+        if shadow_rating is not None and current.get("outcome") == "DISCARDED":
+            raise NotRatableError(incident_id)
         if actual_cause is not None and current.get("actual_cause"):
             raise AlreadyLabelledError(incident_id, "actual_cause", str(current["actual_cause"]))
 

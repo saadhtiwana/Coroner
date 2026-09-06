@@ -31,6 +31,7 @@ def settings(ledger: Ledger, **overrides: object) -> Settings:
         "ledger_path": ledger.path,
         "abstention_threshold": 0.5,
         "max_validation_retries": 1,
+        "model_deadline_seconds": 180.0,
         "sink": "stdout",
         "public_url": "http://brain.test",
         "approval_ttl_seconds": 600,

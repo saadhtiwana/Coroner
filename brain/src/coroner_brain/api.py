@@ -32,7 +32,12 @@ from coroner_brain.contract import Contract
 from coroner_brain.diagnosis import Outcome
 from coroner_brain.graph import DiagnosisPipeline
 from coroner_brain.inflight import InFlightStore, build_store
-from coroner_brain.ledger import AlreadyLabelledError, Ledger, UnknownIncidentError
+from coroner_brain.ledger import (
+    AlreadyLabelledError,
+    Ledger,
+    NotRatableError,
+    UnknownIncidentError,
+)
 from coroner_brain.llm import LLMClient, OpenAICompatibleClient
 from coroner_brain.sink import Mode, Notice, Sink, StdoutSink, notice_from_row
 from coroner_brain.slack import (
@@ -139,6 +144,7 @@ class Services:
                 ledger=self.ledger,
                 abstention_threshold=self.settings.abstention_threshold,
                 max_retries=self.settings.max_validation_retries,
+                model_deadline=self.settings.model_deadline_seconds,
             )
         return self._pipeline
 
@@ -411,7 +417,7 @@ def _slack_block_action(
     if action_id in RATING_ACTIONS:
         try:
             services.ledger.label(incident_id, shadow_rating=RATING_ACTIONS[action_id])
-        except (UnknownIncidentError, AlreadyLabelledError) as exc:
+        except (UnknownIncidentError, AlreadyLabelledError, NotRatableError) as exc:
             _slack_note(sink, where, f"Could not record the rating: {exc}")
             return JSONResponse({})
         _slack_refresh(services, sink, where)
@@ -461,7 +467,7 @@ def _slack_view_submission(
             return JSONResponse({"response_action": "clear"})
     except ApprovalError as exc:
         return reject_with(exc.detail)
-    except (UnknownIncidentError, AlreadyLabelledError) as exc:
+    except (UnknownIncidentError, AlreadyLabelledError, NotRatableError) as exc:
         return reject_with(str(exc))
 
     _slack_refresh(services, sink, where)
@@ -513,6 +519,8 @@ def _label(
         raise HTTPException(
             status_code=409, detail=f"{exc.field} already recorded as {exc.existing!r}"
         ) from exc
+    except NotRatableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ------------------------------------------------------------------ helpers
@@ -527,7 +535,8 @@ def build_response(
     state = pipeline.run(contract)
     outcome = Outcome(state.get("outcome") or Outcome.INSUFFICIENT_CONTEXT.value)
     abstained = outcome is Outcome.INSUFFICIENT_CONTEXT
-    diagnosis = state.get("diagnosis")
+    discarded = outcome is Outcome.DISCARDED
+    diagnosis = None if discarded else state.get("diagnosis")
     final = state.get("confidence_final")
     evidence_class = state.get("evidence_class", "")
 
@@ -542,14 +551,19 @@ def build_response(
         proposed_action="" if abstained or not diagnosis else diagnosis.proposed_action,
         competing_hypothesis="" if abstained or not diagnosis else diagnosis.competing_hypothesis,
         evidence=[] if abstained or not diagnosis else diagnosis.evidence,
-        confidence_model=state.get("confidence_model"),
-        confidence_final=None if abstained else final,
+        confidence_model=None if discarded else state.get("confidence_model"),
+        confidence_final=None if abstained or discarded else final,
         confidence_ceiling=ceiling(EvidenceClass(evidence_class)) if evidence_class else None,
         abstained=abstained,
         abstain_reason=state.get("abstain_reason", ""),
+        discarded=discarded,
+        discard_reason=state.get("discard_reason", ""),
         # Section 4.2 control 4: below the threshold there is no approve
         # affordance at all, so a weak diagnosis cannot be approved by reflex.
-        approvable=(not abstained) and (final is not None) and final >= threshold,
+        approvable=(not abstained)
+        and (not discarded)
+        and (final is not None)
+        and final >= threshold,
         validation_failures=state.get("validation_failures") or [],
     )
 

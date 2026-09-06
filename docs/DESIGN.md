@@ -1149,6 +1149,28 @@ a test needs an in-memory exporter.
 
 **Ratified as implemented.**
 
+### 6.20 The demo runs from source, and says so
+
+**Decision:** `make demo` runs both services on the host from source, and the
+published images are for the single-file install rather than for the demo.
+Section 7.3 rules out a build step, and this is a build step: `uv sync` and
+`go build`, both quiet in the output but real.
+
+The alternative was to have the demo pull the images CI publishes, which is
+what section 7.2 intends. That path cannot be verified from here: the images
+are not published until CI has run on main, and a demo whose first observable
+output is a failed image pull is exactly the failure mode section 7 exists to
+prevent. So the demo uses the toolchain a reader has already installed to run
+the tests, and the images serve the reader who wants Coroner in a cluster and
+never clones anything.
+
+The cost is honest and small: a reader without Go or uv cannot run `make
+demo` today. It is recorded in section 8 rather than papered over, and the
+demo should switch to the published images once CI has published them and the
+image path has actually been run.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability
@@ -1258,6 +1280,13 @@ refused with 429 once the ten-run loop outpaced that. Retry-after is honoured
 inside the deadline. Resolved for the section 5 harness by pacing at the
 provider's rate and re-running discarded incidents after the window; a run
 that is cut short is discarded, not averaged.
+
+**The demo builds from source, so section 7.3 is not met yet.** `make demo`
+runs `uv sync` and `go build`, which is the build step 7.3 rules out, because
+the images CI publishes cannot be verified from here until CI has run on main.
+Section 6.20 records the choice. Resolved by pulling the published images in
+the demo once they exist and that path has been run end to end; until then a
+reader needs Go and uv, which the tests need anyway.
 
 **Validation retries are not recorded in detail.** Five of seven successful
 OOMKilled runs in 6.16 needed a second attempt, and the ledger keeps only the

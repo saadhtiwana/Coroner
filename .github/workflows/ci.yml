@@ -41,7 +41,8 @@ jobs:
       - name: test
         working-directory: agent
         run: go test -race ./...
-      - uses: golangci/golangci-lint-action@v6
+      # v7 or later, because golangci-lint v2 is not supported before it.
+      - uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ env.GOLANGCI_VERSION }}
           working-directory: agent

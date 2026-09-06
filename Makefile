@@ -72,6 +72,16 @@ brain-test: ## Run pytest
 brain-run: ## Serve the brain on :8000 with the stdout sink
 	cd $(BRAIN_DIR) && $(UV) run uvicorn coroner_brain.api:app --host 127.0.0.1 --port 8000
 
+# --------------------------------------------------------------------- demo
+
+.PHONY: demo
+demo: ## Create a cluster, break one workload per failure type, print the diagnoses
+	./scripts/demo.sh
+
+.PHONY: demo-down
+demo-down: ## Delete everything the demo created
+	kind delete cluster --name $(CLUSTER)
+
 # ------------------------------------------------------------------ evaluation
 
 EVAL_OUT ?= eval/results

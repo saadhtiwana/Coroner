@@ -978,6 +978,25 @@ correctness is externally verifiable per section 2.5.
 
 **Ratified as implemented.**
 
+### 6.15 The ledger row carries the contract
+
+**Decision:** schema 3 stores the evidence contract, as diagnosed, on every
+ledger row.
+
+Section 5.3 describes the ledger as a corpus of real outcomes paired with the
+exact evidence available at the time, and says that corpus is the only honest
+way to score a proposed change to the context contract offline. Until schema
+3 the row held the verdict and its citations but not the evidence, so the
+corpus described in 5.3 did not exist. It does now. The cost is a few
+kilobytes per row, mostly log tail, in a file that section 5.4 already says
+is small and single-writer.
+
+The same column is what lets the Slack message be redrawn after a decision
+from the row alone, with observed facts intact and buttons removed, without
+the sink keeping any state of its own.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability

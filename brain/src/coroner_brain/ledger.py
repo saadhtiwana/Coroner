@@ -16,7 +16,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Columns added after version 1, applied with ALTER TABLE on an existing file
+# so a ledger recorded under the old schema keeps its rows. Append-only
+# applies to rows; the schema may grow.
+_MIGRATIONS: dict[int, tuple[str, ...]] = {
+    2: (
+        # The action as approved or edited. For an edit this is the human's
+        # corrected text, which is what the agent must execute, not the
+        # model's proposal.
+        "ALTER TABLE diagnoses ADD COLUMN decision_action TEXT",
+        # HMAC over the approval, keyed to this diagnosis. The agent will not
+        # execute an action whose token it cannot verify. Section 1.
+        "ALTER TABLE diagnoses ADD COLUMN approval_token TEXT",
+    ),
+}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -53,6 +68,20 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     resolved_within_sla INTEGER
 );
 """
+
+
+class UnknownIncidentError(KeyError):
+    """No ledger row exists for the incident."""
+
+
+class AlreadyLabelledError(ValueError):
+    """The label was already written and the ledger does not overwrite."""
+
+    def __init__(self, incident_id: str, field: str, existing: str) -> None:
+        super().__init__(f"{incident_id} already has {field}={existing!r}")
+        self.incident_id = incident_id
+        self.field = field
+        self.existing = existing
 
 
 @dataclass
@@ -94,6 +123,24 @@ class Ledger:
             row = conn.execute("SELECT version FROM schema_meta").fetchone()
             if row is None:
                 conn.execute("INSERT INTO schema_meta (version) VALUES (?)", (SCHEMA_VERSION,))
+                self._apply_migrations(conn, 1)
+            else:
+                self._apply_migrations(conn, int(row["version"]))
+
+    @staticmethod
+    def _apply_migrations(conn: sqlite3.Connection, current: int) -> None:
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(diagnoses)")}
+        for version in range(current + 1, SCHEMA_VERSION + 1):
+            for statement in _MIGRATIONS.get(version, ()):
+                column = statement.split("ADD COLUMN", 1)[1].split()[0]
+                if column not in existing:
+                    conn.execute(statement)
+        if current != SCHEMA_VERSION:
+            conn.execute("UPDATE schema_meta SET version = ?", (SCHEMA_VERSION,))
+
+    def schema_version(self) -> int:
+        with self._connect() as conn:
+            return int(conn.execute("SELECT version FROM schema_meta").fetchone()[0])
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -128,6 +175,8 @@ class Ledger:
         *,
         decision: str | None = None,
         decision_reason: str | None = None,
+        decision_action: str | None = None,
+        approval_token: str | None = None,
         shadow_rating: str | None = None,
         actual_cause: str | None = None,
         resolved_within_sla: bool | None = None,
@@ -137,18 +186,39 @@ class Ledger:
         decision and shadow_rating are separate columns and never merged. A
         rating is hypothetical and carries no risk; an approval does. The gap
         between them is a measurement worth keeping. See docs/DESIGN.md 5.5.
+
+        Each label is written once. Section 5.4: no record is mutated after
+        its label is written, so a second decision or a second rating for the
+        same incident is refused rather than overwriting the first.
         """
-        updates: dict[str, Any] = {"decision_at": datetime.now(UTC).isoformat()}
+        current = self.get(incident_id)
+        if current is None:
+            raise UnknownIncidentError(incident_id)
+        if decision is not None and current.get("decision"):
+            raise AlreadyLabelledError(incident_id, "decision", str(current["decision"]))
+        if shadow_rating is not None and current.get("shadow_rating"):
+            raise AlreadyLabelledError(incident_id, "shadow_rating", str(current["shadow_rating"]))
+        if actual_cause is not None and current.get("actual_cause"):
+            raise AlreadyLabelledError(incident_id, "actual_cause", str(current["actual_cause"]))
+
+        updates: dict[str, Any] = {}
         if decision is not None:
             updates["decision"] = decision
+            updates["decision_at"] = datetime.now(UTC).isoformat()
         if decision_reason is not None:
             updates["decision_reason"] = decision_reason
+        if decision_action is not None:
+            updates["decision_action"] = decision_action
+        if approval_token is not None:
+            updates["approval_token"] = approval_token
         if shadow_rating is not None:
             updates["shadow_rating"] = shadow_rating
         if actual_cause is not None:
             updates["actual_cause"] = actual_cause
         if resolved_within_sla is not None:
             updates["resolved_within_sla"] = int(resolved_within_sla)
+        if not updates:
+            return
 
         assignments = ", ".join(f"{name} = :{name}" for name in updates)
         updates["incident_id"] = incident_id

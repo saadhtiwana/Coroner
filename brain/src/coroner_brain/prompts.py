@@ -7,7 +7,10 @@ actually enforces the citation rules. See docs/DESIGN.md 4.3.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "2"
+import json
+from typing import Any
+
+PROMPT_VERSION = "3"
 
 SYSTEM = """You are a Kubernetes incident analyst performing an autopsy on a failed workload.
 
@@ -87,6 +90,19 @@ def system_prompt(failure_type: str) -> str:
     if guidance:
         return f"{SYSTEM}\n\nFailure type specific guidance:\n{guidance}"
     return SYSTEM
+
+
+def render_contract(payload: dict[str, Any]) -> str:
+    """The contract as the model sees it: compact JSON.
+
+    Indentation is characters the model pays for and the validator never
+    reads. Measured 2026-09-06 on the recorded image pull contract: 5044
+    characters indented against 4134 compact, about a fifth. The token
+    saving is what the ledger's prompt_tokens column records from here on;
+    it is not asserted here. The prompt version is bumped because the input
+    changed, even though no word of the prompt did.
+    """
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
 
 def user_prompt(contract_json: str, retry_failures: list[str] | None = None) -> str:

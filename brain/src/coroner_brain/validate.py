@@ -132,6 +132,25 @@ def _normalise(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
+def _unescape(cited: str) -> str:
+    """Undo JSON escaping the model copied from the contract it was shown.
+
+    Recorded live after the contract began travelling as compact JSON: the
+    model cited a log line as the two characters backslash and n rather
+    than a newline, and a shell script's quotes as backslash-quote, which
+    is exactly what the JSON it read contained. Both citations were right.
+    If the cited text is a valid JSON string body it is decoded; otherwise
+    it is kept as given.
+    """
+    if "\\" not in cited:
+        return cited
+    try:
+        decoded = json.loads('"' + cited.replace('"', '\\"').replace('\\\\"', '\\"') + '"')
+    except json.JSONDecodeError:
+        return cited
+    return str(decoded)
+
+
 def _render(value: Any) -> str:  # noqa: ANN401 - renders arbitrary contract values
     """Render a contract value the way the model saw it.
 
@@ -176,8 +195,10 @@ def validate(diagnosis: Diagnosis, payload: dict[str, Any]) -> ValidationReport:
             failures.append(f"cited field {citation.field!r} does not exist in the contract")
             continue
 
-        cited = _normalise(citation.value)
         actual = _normalise(_render(value))
+        cited = _normalise(citation.value)
+        if not _value_matches(cited, actual):
+            cited = _normalise(_unescape(citation.value))
         if not cited:
             failures.append(f"citation for {citation.field!r} has an empty value")
             continue

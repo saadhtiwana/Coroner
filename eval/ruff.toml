@@ -1,0 +1,6 @@
+# The harness is checked with the brain's rules. The catalogue is data: its
+# long lines are log strings and truths that read better unwrapped.
+extend = "../brain/pyproject.toml"
+
+[lint.per-file-ignores]
+"catalog.py" = ["E501"]

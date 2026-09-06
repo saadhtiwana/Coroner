@@ -242,3 +242,24 @@ def test_path_split_across_source_and_field_still_resolves(imagepull: Contract) 
     report = validate(invented, payload)
     assert not report.ok
     assert any("does not exist" in f for f in report.failures)
+
+
+def test_a_citation_copied_in_escaped_form_still_verifies(crashloop: Contract) -> None:
+    """Recorded live: the model cited the JSON-escaped log text it was shown."""
+    payload = crashloop.model_dump(mode="json")
+    escaped_log = "[error]   dial tcp 10.96.31.14:5432: connect: connection refused\\n[fatal]"
+    escaped_args = 'echo \\"[startup] orders-api booting\\"\\necho'
+    diagnosis = _diagnosis(
+        evidence=[
+            Citation(source="logs", field="logs.content", value=escaped_log),
+            Citation(source="container", field="container.args[0]", value=escaped_args),
+        ]
+    )
+    report = validate(diagnosis, payload)
+    assert report.ok, report.failures
+
+    # Unescaping does not make a wrong value right.
+    wrong = _diagnosis(
+        evidence=[Citation(source="logs", field="logs.content", value="OutOfMemory\\nheap")]
+    )
+    assert not validate(wrong, payload).ok

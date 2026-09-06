@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Columns added after version 1, applied with ALTER TABLE on an existing file
 # so a ledger recorded under the old schema keeps its rows. Append-only
@@ -52,6 +52,16 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE diagnoses ADD COLUMN executed_at TEXT",
         "ALTER TABLE diagnoses ADD COLUMN resolution_detail TEXT",
         "ALTER TABLE diagnoses ADD COLUMN resolved_at TEXT",
+    ),
+    6: (
+        # What the diagnosis cost. Tokens are summed over every model call
+        # the incident made, retries included; an abstention at the gate
+        # made none and costs zero. latency_ms_total is the whole pipeline
+        # from contract to ledger row, waits on rate limits included.
+        "ALTER TABLE diagnoses ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE diagnoses ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE diagnoses ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE diagnoses ADD COLUMN latency_ms_total INTEGER NOT NULL DEFAULT 0",
     ),
 }
 
@@ -99,7 +109,11 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     execution_detail  TEXT,
     executed_at       TEXT,
     resolution_detail TEXT,
-    resolved_at       TEXT
+    resolved_at       TEXT,
+    prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd          REAL NOT NULL DEFAULT 0,
+    latency_ms_total  INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -156,6 +170,10 @@ class LedgerEntry:
     validation_retries: int = 0
     contract_json: str = ""
     discard_reason: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    latency_ms_total: int = 0
 
 
 class Ledger:

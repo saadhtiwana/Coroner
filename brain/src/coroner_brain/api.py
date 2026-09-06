@@ -1,11 +1,14 @@
 """HTTP surface for the brain.
 
-POST /diagnose accepts an evidence contract and returns the pipeline's verdict.
-There is no Slack integration yet; this milestone ends at the verdict.
+POST /diagnose accepts an evidence contract, runs the pipeline, writes the
+ledger, delivers the verdict to the configured sink, and returns the verdict
+to the agent. The ledger write happens before delivery, so a sink failure
+cannot lose the record; section 5.1.
 """
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Literal
 
@@ -15,10 +18,14 @@ from pydantic import BaseModel
 from coroner_brain import CONTRACT_VERSION, __version__
 from coroner_brain.config import Settings, load_settings
 from coroner_brain.contract import Contract
-from coroner_brain.diagnosis import Citation, Outcome
+from coroner_brain.diagnosis import Outcome
 from coroner_brain.graph import DiagnosisPipeline
 from coroner_brain.ledger import Ledger
 from coroner_brain.llm import LLMClient, OpenAICompatibleClient
+from coroner_brain.sink import Mode, Notice, Sink, StdoutSink
+from coroner_brain.verdict import DiagnoseResponse
+
+log = logging.getLogger("coroner.brain")
 
 
 class Health(BaseModel):
@@ -27,35 +34,6 @@ class Health(BaseModel):
     contract_version: str
     model: str
     credentials_present: bool
-
-
-class DiagnoseResponse(BaseModel):
-    """The verdict.
-
-    Observed facts stay separate from inferred ones all the way to the caller.
-    Section 4.2 control 5: a human must be able to evaluate the proposal against
-    raw evidence without trusting the narrative.
-    """
-
-    incident_id: str
-    failure_type: str
-    outcome: Outcome
-    evidence_class: str
-
-    root_cause: str = ""
-    explanation: str = ""
-    proposed_action: str = ""
-    competing_hypothesis: str = ""
-    evidence: list[Citation] = []
-
-    confidence_model: float | None = None
-    confidence_final: float | None = None
-    confidence_ceiling: float | None = None
-
-    abstained: bool = False
-    abstain_reason: str = ""
-    approvable: bool = False
-    validation_failures: list[str] = []
 
 
 app = FastAPI(
@@ -88,6 +66,18 @@ def _pipeline() -> DiagnosisPipeline:
     )
 
 
+@lru_cache(maxsize=1)
+def _sink() -> Sink:
+    return build_sink(_settings())
+
+
+def build_sink(settings: Settings) -> Sink:
+    """Pick the sink from configuration. stdout needs nothing and is the default."""
+    if settings.sink == "stdout":
+        return StdoutSink()
+    raise HTTPException(status_code=503, detail=f"unknown sink {settings.sink!r}")
+
+
 @app.get("/healthz")
 def healthz() -> Health:
     """Liveness. Reports whether credentials are present without revealing them."""
@@ -103,7 +93,34 @@ def healthz() -> Health:
 
 @app.post("/diagnose")
 def diagnose(contract: Contract) -> DiagnoseResponse:
-    return build_response(_pipeline(), contract, _settings().abstention_threshold)
+    settings = _settings()
+    response = build_response(_pipeline(), contract, settings.abstention_threshold)
+    return deliver(response, contract, settings, _sink())
+
+
+def deliver(
+    response: DiagnoseResponse, contract: Contract, settings: Settings, sink: Sink
+) -> DiagnoseResponse:
+    """Hand the verdict to the sink. The ledger row already exists.
+
+    A sink that fails is logged and the verdict is still returned to the
+    agent with delivered false: the record is safe, the human did not see
+    it, and both facts are reported rather than one hiding the other.
+    """
+    mode: Mode = "live" if settings.is_promoted(contract.failure_type) else "shadow"
+    notice = Notice(
+        contract=contract,
+        verdict=response,
+        mode=mode,
+        deadline=None,
+        public_url=settings.public_url,
+    )
+    try:
+        sink.deliver(notice)
+    except Exception:  # a sink failure must not lose the verdict
+        log.exception("sink %s failed for incident %s", sink.name, response.incident_id)
+        return response.model_copy(update={"delivered": False, "mode": mode})
+    return response.model_copy(update={"delivered": True, "mode": mode})
 
 
 def build_response(

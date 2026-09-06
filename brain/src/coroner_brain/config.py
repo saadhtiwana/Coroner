@@ -29,6 +29,18 @@ ABSTENTION_THRESHOLD = 0.5
 # A response that fails validation is retried once, then abstains.
 MAX_VALIDATION_RETRIES = 1
 
+# Output sink. stdout is the default and needs no configuration; Slack is
+# opt-in and is never a prerequisite for seeing the system work. Section 7.2.
+DEFAULT_SINK = "stdout"
+
+# How long an approvable diagnosis waits for a decision before it is recorded
+# as expired. Section 5.2 tracks expiry as its own label.
+APPROVAL_TTL_SECONDS = 1800
+
+# Where the decision endpoints are reachable from a human's terminal. Only
+# used to render instructions; the brain does not call itself.
+DEFAULT_PUBLIC_URL = "http://localhost:8000"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -39,9 +51,26 @@ class Settings:
     abstention_threshold: float
     max_validation_retries: int
 
+    sink: str
+    public_url: str
+    approval_ttl_seconds: int
+
+    # Failure types promoted out of shadow mode. Section 5.5: a type stays in
+    # shadow, rating only, until it clears its prediction over 20 incidents.
+    # Empty means every type is in shadow, which is the honest default for a
+    # system with no accuracy data yet.
+    promoted_types: frozenset[str]
+
+    # Optional. Without it in-flight incidents live in process memory and do
+    # not survive a restart, which is logged at startup.
+    redis_url: str | None
+
     @property
     def has_credentials(self) -> bool:
         return bool(self.api_key)
+
+    def is_promoted(self, failure_type: str) -> bool:
+        return failure_type in self.promoted_types
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -62,4 +91,15 @@ def load_settings(env_file: Path | None = None) -> Settings:
         max_validation_retries=int(
             os.environ.get("CORONER_MAX_VALIDATION_RETRIES", MAX_VALIDATION_RETRIES)
         ),
+        sink=os.environ.get("CORONER_SINK", DEFAULT_SINK).strip().lower() or DEFAULT_SINK,
+        public_url=os.environ.get("CORONER_PUBLIC_URL", DEFAULT_PUBLIC_URL).rstrip("/"),
+        approval_ttl_seconds=int(
+            os.environ.get("CORONER_APPROVAL_TTL_SECONDS", APPROVAL_TTL_SECONDS)
+        ),
+        promoted_types=_csv(os.environ.get("CORONER_PROMOTED_TYPES", "")),
+        redis_url=os.environ.get("CORONER_REDIS_URL") or None,
     )
+
+
+def _csv(raw: str) -> frozenset[str]:
+    return frozenset(part.strip() for part in raw.split(",") if part.strip())

@@ -72,3 +72,102 @@ def test_abstention_is_not_approvable(crashloop: Contract, ledger: Ledger) -> No
     assert result.root_cause == ""
     assert result.evidence == []
     assert result.abstain_reason
+
+
+def test_diagnose_delivers_to_the_sink_after_the_ledger_write(
+    imagepull: Contract, ledger: Ledger
+) -> None:
+    from coroner_brain.api import deliver
+    from coroner_brain.config import Settings
+    from coroner_brain.sink import Notice
+
+    class Recording:
+        name = "recording"
+
+        def __init__(self) -> None:
+            self.notices: list[Notice] = []
+
+        def deliver(self, notice: Notice) -> None:
+            self.notices.append(notice)
+
+    payload = imagepull.model_dump(mode="json")
+    answer = json.dumps(
+        {
+            "root_cause": "The image cannot be pulled.",
+            "explanation": "The kubelet reported a pull failure.",
+            "proposed_action": "Fix the image reference.",
+            "confidence": 0.9,
+            "evidence": [
+                {
+                    "source": "container",
+                    "field": "container.image",
+                    "value": payload["container"]["image"],
+                }
+            ],
+            "competing_hypothesis": "",
+        }
+    )
+    pipeline = DiagnosisPipeline(client=ScriptedClient([answer]), ledger=ledger)
+    verdict = build_response(pipeline, imagepull, 0.5)
+    assert ledger.get(imagepull.incident_id) is not None, "ledger row must exist before delivery"
+
+    settings = Settings(
+        api_key=None,
+        base_url="",
+        model="m",
+        ledger_path=ledger.path,
+        abstention_threshold=0.5,
+        max_validation_retries=1,
+        sink="recording",
+        public_url="http://brain.test",
+        approval_ttl_seconds=60,
+        promoted_types=frozenset(),
+        redis_url=None,
+    )
+    sink = Recording()
+    out = deliver(verdict, imagepull, settings, sink)
+    assert out.delivered is True
+    assert out.mode == "shadow", "nothing is promoted by default"
+    assert len(sink.notices) == 1
+    assert sink.notices[0].mode == "shadow"
+    assert not sink.notices[0].offers_approval
+
+    promoted = Settings(**{**settings.__dict__, "promoted_types": frozenset({"ImagePullBackOff"})})
+    out = deliver(verdict, imagepull, promoted, sink)
+    assert out.mode == "live"
+    assert sink.notices[-1].offers_approval
+
+
+def test_a_failing_sink_does_not_lose_the_verdict(imagepull: Contract, ledger: Ledger) -> None:
+    from coroner_brain.api import deliver
+    from coroner_brain.config import Settings
+    from coroner_brain.sink import Notice
+
+    class Broken:
+        name = "broken"
+
+        def deliver(self, notice: Notice) -> None:
+            raise RuntimeError("slack is down")
+
+    pipeline = DiagnosisPipeline(client=ScriptedClient([]), ledger=ledger)
+    stripped = imagepull.model_copy(deep=True)
+    stripped.failure_type = "CrashLoopBackOff"
+    stripped.logs.available = False
+    verdict = build_response(pipeline, stripped, 0.5)
+    settings = Settings(
+        api_key=None,
+        base_url="",
+        model="m",
+        ledger_path=ledger.path,
+        abstention_threshold=0.5,
+        max_validation_retries=1,
+        sink="broken",
+        public_url="http://brain.test",
+        approval_ttl_seconds=60,
+        promoted_types=frozenset(),
+        redis_url=None,
+    )
+    out = deliver(verdict, stripped, settings, Broken())
+    assert out.delivered is False
+    assert out.outcome is Outcome.INSUFFICIENT_CONTEXT
+    assert ledger.get(stripped.incident_id) is not None

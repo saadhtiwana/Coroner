@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 430" width="880" height="430" role="img" aria-label="Architecture. Inside the cluster, the Kubernetes API server feeds the coroner agent, which classifies a failure, collects an evidence contract, redacts it, and posts it over HTTP to the coroner brain. The brain holds no cluster credentials. It runs a diagnosis graph, writes an append-only SQLite ledger, and delivers the verdict to a sink, stdout by default or Slack when configured. The brain calls a model API. Approval decisions return from the sink to the brain, which mints a signed token that the agent verifies before it changes anything in the cluster.">
+  <title>Coroner architecture</title>
+  <style>
+    .canvas { fill: #fbfbfa; }
+    .box { fill: #ffffff; stroke: #d5d5d2; stroke-width: 1; }
+    .zone { fill: #f4f4f2; stroke: #dededa; stroke-width: 1; stroke-dasharray: 4 3; }
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #1b1b1b; }
+    .h { font-size: 13px; font-weight: 600; }
+    .s { font-size: 11.5px; fill: #5f6368; }
+    .z { font-size: 11px; fill: #7a7a75; letter-spacing: 0.06em; }
+    .lbl { font-size: 11px; fill: #5f6368; }
+    .line { stroke: #9a9a94; stroke-width: 1.2; fill: none; }
+    .accent { stroke: #b23b3b; stroke-width: 1.4; fill: none; }
+    .accent-t { fill: #b23b3b; font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; fill: #5f6368; }
+  </style>
+  <rect class="canvas" x="0" y="0" width="880" height="430"/>
+
+  <rect class="zone" x="16" y="40" width="392" height="330" rx="6"/>
+  <text class="t z" x="30" y="60">KUBERNETES CLUSTER</text>
+
+  <rect class="box" x="40" y="78" width="150" height="52" rx="4"/>
+  <text class="t h" x="56" y="100">API server</text>
+  <text class="t s" x="56" y="117">pods, events, logs</text>
+
+  <rect class="box" x="40" y="188" width="344" height="150" rx="4"/>
+  <text class="t h" x="56" y="211">coroner-agent</text>
+  <text class="t s" x="56" y="229">the only holder of cluster credentials</text>
+  <rect class="box" x="56" y="243" width="94" height="34" rx="3"/>
+  <text class="t s" x="66" y="264">classify</text>
+  <rect class="box" x="160" y="243" width="94" height="34" rx="3"/>
+  <text class="t s" x="170" y="264">collect</text>
+  <rect class="box" x="264" y="243" width="104" height="34" rx="3"/>
+  <text class="t s" x="274" y="264">redact</text>
+  <text class="t mono" x="56" y="300">read-only RBAC. patch verbs only with --execute</text>
+  <text class="t mono" x="56" y="318">verifies an approval token before it changes anything</text>
+
+  <path class="line" d="M115 130 L115 188" marker-end="url(#a)"/>
+  <text class="t lbl" x="124" y="163">watch</text>
+
+  <rect class="zone" x="440" y="40" width="424" height="330" rx="6"/>
+  <text class="t z" x="454" y="60">CORONER BRAIN, NO CLUSTER CREDENTIALS</text>
+
+  <rect class="box" x="464" y="78" width="376" height="104" rx="4"/>
+  <text class="t h" x="480" y="101">diagnosis graph</text>
+  <text class="t s" x="480" y="119">classify, gate, diagnose, validate</text>
+  <text class="t mono" x="480" y="141">a deterministic gate runs before any model call</text>
+  <text class="t mono" x="480" y="159">citations are checked in code after every one</text>
+
+  <rect class="box" x="464" y="204" width="176" height="62" rx="4"/>
+  <text class="t h" x="480" y="227">ledger</text>
+  <text class="t s" x="480" y="245">append-only SQLite</text>
+
+  <rect class="box" x="664" y="204" width="176" height="62" rx="4"/>
+  <text class="t h" x="680" y="227">sinks</text>
+  <text class="t s" x="680" y="245">stdout by default, Slack opt-in</text>
+
+  <rect class="box" x="464" y="290" width="376" height="48" rx="4"/>
+  <text class="t h" x="480" y="313">model API</text>
+  <text class="t s" x="480" y="330">one credential, no cluster access, temperature 0</text>
+
+  <path class="line" d="M384 232 L464 130" marker-end="url(#a)"/>
+  <text class="t lbl" x="392" y="176">evidence contract</text>
+  <text class="t mono" x="392" y="192">HTTP</text>
+
+  <path class="line" d="M600 182 L560 204" marker-end="url(#a)"/>
+  <path class="line" d="M700 182 L740 204" marker-end="url(#a)"/>
+  <path class="line" d="M652 182 L652 290" marker-end="url(#a)"/>
+  <text class="t lbl" x="560" y="196">written first</text>
+
+  <path class="accent" d="M752 266 L752 288 L440 288 L440 300 L392 300" marker-end="url(#b)"/>
+  <text class="t accent-t" x="452" y="282">approval, signed and keyed to one diagnosis</text>
+
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#9a9a94"/>
+    </marker>
+    <marker id="b" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#b23b3b"/>
+    </marker>
+  </defs>
+</svg>

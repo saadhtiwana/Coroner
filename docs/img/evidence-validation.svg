@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 400" width="880" height="400" role="img" aria-label="The evidence validator. The model must return an evidence array of citations, each naming a source, a dotted field path, and the value at that path. After generation, code resolves every path against the exact contract that was sent and compares the value; scalars must match exactly, and only long free text may be cited by excerpt. Every quoted span in the prose must also appear verbatim in the collected text. A citation to a field that does not exist, a value that does not match, or a quoted log line the workload never emitted is rejected in code, and the diagnosis is retried once and then abstains. The example shows two accepted citations and two rejected ones: an invented field path and a fabricated log quote.">
+  <title>How a diagnosis is checked against the evidence</title>
+  <style>
+    .canvas { fill: #fbfbfa; }
+    .box { fill: #ffffff; stroke: #d5d5d2; stroke-width: 1; }
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #1b1b1b; }
+    .h { font-size: 12.5px; font-weight: 600; }
+    .s { font-size: 11px; fill: #5f6368; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; fill: #1b1b1b; }
+    .mono-dim { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; fill: #7a7a75; }
+    .line { stroke: #9a9a94; stroke-width: 1.2; fill: none; }
+    .accent { stroke: #b23b3b; stroke-width: 1.3; fill: none; }
+    .ok { fill: #3d6b45; font-size: 11px; font-weight: 600; }
+    .no { fill: #b23b3b; font-size: 11px; font-weight: 600; }
+  </style>
+  <rect class="canvas" x="0" y="0" width="880" height="400"/>
+
+  <text class="t s" x="24" y="32">Prompt instructions are not a control. This is the control, and it runs after the model returns.</text>
+
+  <rect class="box" x="24" y="52" width="330" height="196" rx="4"/>
+  <text class="t h" x="38" y="74">the contract that was sent</text>
+  <text class="t mono-dim" x="38" y="98">container.last_terminated.exit_code</text>
+  <text class="t mono" x="38" y="113">137</text>
+  <text class="t mono-dim" x="38" y="134">container.memory_limit</text>
+  <text class="t mono" x="38" y="149">128Mi</text>
+  <text class="t mono-dim" x="38" y="170">logs.content</text>
+  <text class="t mono" x="38" y="185">[index] segment 3 (~48MiB)</text>
+  <text class="t s" x="38" y="212">no logs.stack_trace, because the agent</text>
+  <text class="t s" x="38" y="228">never collected one</text>
+
+  <rect class="box" x="414" y="52" width="442" height="196" rx="4"/>
+  <text class="t h" x="428" y="74">what the model returned, citation by citation</text>
+
+  <text class="t ok" x="428" y="100">accepted</text>
+  <text class="t mono" x="500" y="100">container.last_terminated.exit_code = 137</text>
+  <text class="t ok" x="428" y="120">accepted</text>
+  <text class="t mono" x="500" y="120">container.memory_limit = 128Mi</text>
+
+  <text class="t no" x="428" y="152">rejected</text>
+  <text class="t mono" x="500" y="152">logs.stack_trace = at com.example.Main</text>
+  <text class="t s" x="500" y="168">the path does not resolve in the contract</text>
+
+  <text class="t no" x="428" y="196">rejected</text>
+  <text class="t mono" x="500" y="196">"OutOfMemoryError: heap exhausted"</text>
+  <text class="t s" x="500" y="212">quoted in the prose, absent from the collected text</text>
+
+  <path class="line" d="M354 150 L414 150" marker-end="url(#a)"/>
+  <text class="t s" x="360" y="142">checked</text>
+
+  <text class="t s" x="24" y="284">Two rules make the check strict rather than decorative:</text>
+  <rect class="box" x="24" y="298" width="406" height="78" rx="4"/>
+  <text class="t h" x="38" y="320">a scalar must match exactly</text>
+  <text class="t s" x="38" y="338">only genuinely long free text may be cited by excerpt.</text>
+  <text class="t s" x="38" y="355">Comparing substrings both ways once accepted a cited</text>
+  <text class="t s" x="38" y="370">exit code of 137 against an actual 1. A test caught it.</text>
+
+  <rect class="box" x="450" y="298" width="406" height="78" rx="4"/>
+  <text class="t h" x="464" y="320">failing is not fatal, and not silent</text>
+  <text class="t s" x="464" y="338">a diagnosis whose citations do not verify is retried</text>
+  <text class="t s" x="464" y="355">once, then routed to INSUFFICIENT_CONTEXT. It never</text>
+  <text class="t s" x="464" y="370">reaches a human, and the failure is on the ledger row.</text>
+
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#9a9a94"/>
+    </marker>
+  </defs>
+</svg>

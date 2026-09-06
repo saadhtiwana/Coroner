@@ -1,0 +1,28 @@
+# Write access for coroner-agent. Applied only when execution is enabled.
+#
+# The agent patches the pod template of the workload that owns a failed pod,
+# and only that: a memory limit or an image on one container. It never
+# deletes, scales, or creates. These verbs are kept out of rbac.yaml so that
+# an install without execution cannot mutate anything, whatever the code
+# does. See docs/DESIGN.md section 6.5 and the --execute flag.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coroner-agent-write
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coroner-agent-write
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: coroner-agent-write
+subjects:
+  - kind: ServiceAccount
+    name: coroner-agent
+    namespace: coroner

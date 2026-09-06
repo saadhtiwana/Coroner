@@ -32,6 +32,7 @@ import (
 	"github.com/saadhtiwana/coroner/agent/internal/collect"
 	"github.com/saadhtiwana/coroner/agent/internal/contract"
 	"github.com/saadhtiwana/coroner/agent/internal/kube"
+	"github.com/saadhtiwana/coroner/agent/internal/remediate"
 )
 
 var version = "dev"
@@ -47,6 +48,13 @@ type options struct {
 	brainURL     string
 	brainTimeout time.Duration
 	emit         bool
+
+	// Remediation. execute defaults to false: the agent emits every plan
+	// and applies none until this is set on purpose, and the write RBAC in
+	// deploy/manifests/rbac-write.yaml is applied alongside it.
+	execute           bool
+	approvalSecret    string
+	remediateInterval time.Duration
 }
 
 func main() {
@@ -77,6 +85,9 @@ func parseFlags() options {
 	flag.StringVar(&o.brainURL, "brain-url", os.Getenv("CORONER_BRAIN_URL"), "base URL of the brain; empty means write contracts to stdout instead (env CORONER_BRAIN_URL)")
 	flag.DurationVar(&o.brainTimeout, "brain-timeout", brain.DefaultTimeout, "timeout for one diagnosis round trip")
 	flag.BoolVar(&o.emit, "emit", false, "also write each contract to stdout when a brain is configured")
+	flag.BoolVar(&o.execute, "execute", false, "apply approved remediations; off by default, plans are only emitted")
+	flag.StringVar(&o.approvalSecret, "approval-secret", os.Getenv("CORONER_APPROVAL_SECRET"), "secret shared with the brain for verifying approval tokens (env CORONER_APPROVAL_SECRET)")
+	flag.DurationVar(&o.remediateInterval, "remediate-interval", 30*time.Second, "how often to ask the brain for approved incidents")
 	flag.Parse()
 	return o
 }
@@ -105,10 +116,55 @@ func run(opts options, logger *slog.Logger) error {
 		"output", handler.name(),
 	)
 
+	runner := newRunner(client, handler, opts, logger)
+
 	if opts.once {
-		return scanOnce(ctx, client, collector, handler, opts.namespace, logger)
+		if err := scanOnce(ctx, client, collector, handler, opts.namespace, logger); err != nil {
+			return err
+		}
+		if runner != nil {
+			if err := runner.RunOnce(ctx); err != nil {
+				return fmt.Errorf("remediation pass: %w", err)
+			}
+		}
+		return nil
+	}
+	if runner != nil {
+		go runner.Run(ctx, opts.remediateInterval)
 	}
 	return watch(ctx, client, collector, handler, opts, logger)
+}
+
+// newRunner wires remediation when a brain is configured. Without a brain
+// there are no approvals to act on. Without a secret the runner still polls
+// and refuses every approval with the reason, so a misconfiguration is
+// visible in the log rather than silent.
+func newRunner(client kubernetes.Interface, h handler, opts options, logger *slog.Logger) *remediate.Runner {
+	bh, ok := h.(*brainHandler)
+	if !ok {
+		return nil
+	}
+	if opts.approvalSecret == "" {
+		logger.Warn("no approval secret configured; every approval will be refused")
+	}
+	if opts.execute {
+		logger.Warn("execution is ENABLED; approved plans will be applied to the cluster")
+	} else {
+		logger.Info("execution is disabled; approved plans will be emitted and not applied")
+	}
+	runner := &remediate.Runner{
+		Brain:    bh.client,
+		Secret:   []byte(opts.approvalSecret),
+		Executor: remediate.Executor{Client: client, Enabled: opts.execute},
+		Resolver: remediate.NewResolver(client),
+		Logger:   logger,
+		Known:    bh.known,
+	}
+	runner.Tracking = func(ctx context.Context, incidentID string, t remediate.Target) {
+		go runner.Track(ctx, incidentID, t)
+	}
+	bh.remember = runner.Remember
+	return runner
 }
 
 // handler receives each assembled contract.
@@ -142,7 +198,7 @@ func newHandler(ctx context.Context, opts options, logger *slog.Logger) (handler
 	}
 	logger.Info("brain reachable", "brain", opts.brainURL, "brain_version", health.Version, "model", health.Model)
 
-	h := &brainHandler{client: client, logger: logger}
+	h := &brainHandler{client: client, logger: logger, known: &sync.Map{}}
 	if opts.emit {
 		h.also = emitter
 	}
@@ -157,6 +213,12 @@ type brainHandler struct {
 	client *brain.Client
 	logger *slog.Logger
 	also   *emitter
+
+	// known records the context hash the brain returned for each contract
+	// this process sent, so an approval can be checked against the evidence
+	// the agent actually saw.
+	known    *sync.Map
+	remember func(incidentID, contextHash string)
 }
 
 func (h *brainHandler) name() string { return "brain" }
@@ -170,6 +232,9 @@ func (h *brainHandler) handle(ctx context.Context, c *contract.Contract) error {
 	v, err := h.client.Diagnose(ctx, c)
 	if err != nil {
 		return fmt.Errorf("diagnosing %s: %w", c.IncidentID, err)
+	}
+	if h.remember != nil && v.ContextHash != "" {
+		h.remember(v.IncidentID, v.ContextHash)
 	}
 	attrs := []any{
 		"incident_id", v.IncidentID,

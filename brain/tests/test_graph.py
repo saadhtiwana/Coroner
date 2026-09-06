@@ -56,6 +56,35 @@ def test_gate_abstains_without_spending_a_model_call(crashloop: Contract, ledger
     assert row["outcome"] == Outcome.INSUFFICIENT_CONTEXT.value
 
 
+def test_gate_abstains_on_an_organically_thin_incident(
+    starterror_procready: Contract, ledger: Ledger
+) -> None:
+    """The first abstention not constructed by hand.
+
+    Every earlier abstention test strips the logs from a contract that had
+    them. This contract arrived from the cluster already empty: exit 128,
+    reason StartError, a termination message that names nothing, and a log
+    stream that exists but holds no bytes. The gate must abstain without
+    spending a model call, and the reason must say which fact was missing.
+    """
+    assert starterror_procready.failure_type == "CrashLoopBackOff"
+    assert starterror_procready.logs.available
+    assert starterror_procready.logs.empty
+
+    client = ScriptedClient([_answer(root_cause="should never be produced")])
+    state = _pipeline(client, ledger).run(starterror_procready)
+
+    assert client.calls == []
+    assert state["outcome"] == Outcome.INSUFFICIENT_CONTEXT.value
+    assert "produced no log output" in state["abstain_reason"]
+    assert "128" in state["abstain_reason"]
+
+    row = ledger.get(starterror_procready.incident_id)
+    assert row is not None
+    assert row["abstained"] == 1
+    assert row["evidence_class"] == "crashloop_logs_unavailable"
+
+
 def test_truthful_diagnosis_is_accepted(imagepull: Contract, ledger: Ledger) -> None:
     payload = imagepull.model_dump(mode="json")
     client = ScriptedClient(

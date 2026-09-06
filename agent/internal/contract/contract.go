@@ -158,11 +158,16 @@ type NodeSummary struct {
 	PIDPressure    bool   `json:"pid_pressure"`
 }
 
-// TimeOrNil returns a pointer to t, or nil when t is the zero time. Optional
-// timestamps are pointers because encoding/json cannot omit a zero struct, and
-// a zero time.Time serialises as a date in 1970 that reads as real.
+// TimeOrNil returns a pointer to t, or nil when t carries no information.
+// Optional timestamps are pointers because encoding/json cannot omit a zero
+// struct, and a zero time serialises as a date in 1970 that reads as real.
+//
+// Two zero values exist. Go's zero time.Time is year 1, and the Unix epoch is
+// 1970. Kubernetes reports the second for a container that never started:
+// recorded live, lastState.terminated.startedAt was "1970-01-01T00:00:00Z" on
+// a container whose init was killed. Both mean "never", and both become null.
 func TimeOrNil(t time.Time) *time.Time {
-	if t.IsZero() {
+	if t.IsZero() || t.Unix() == 0 {
 		return nil
 	}
 	return &t

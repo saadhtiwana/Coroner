@@ -1,0 +1,17 @@
+# Recreates the recorded ImagePullBackOff incident: a repository that does not
+# exist. ghcr.io answers 403 for both a missing repository and a private one,
+# so the event message cannot separate a wrong tag from missing credentials.
+# docs/DESIGN.md section 2.1.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-imagepull
+  namespace: default
+  labels:
+    coroner.dev/purpose: probe
+spec:
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: puller
+      image: ghcr.io/saadhtiwana/coroner-does-not-exist:v0.0.0

@@ -222,6 +222,55 @@ func classifyTerminated(cs *corev1.ContainerStatus) (Result, bool) {
 	return Result{}, false
 }
 
+// WithEvents refines a classification using the pod's own event history.
+//
+// Recorded live on the same 2Mi container across consecutive restarts: the
+// runtime reported "container init was OOM-killed (memory limit too low?)" for
+// one kill and "error during container init: procReady not received" for the
+// next. Same limit, same kill, different wording. A classifier that reads only
+// the latest termination message files the second as an ordinary crash with
+// empty logs, which routes it to abstention. The pod's events, filtered by UID
+// so they belong to this incarnation and no other, retain the earlier wording.
+//
+// The refinement is deliberately narrow. It applies only when the latest
+// termination already looks like an init failure, so an application crash that
+// merely shares a pod with an old memory event is not reclassified.
+func WithEvents(r Result, cs *corev1.ContainerStatus, eventMessages []string) Result {
+	if r.Type != CrashLoopBackOff || cs == nil {
+		return r
+	}
+	t := cs.LastTerminationState.Terminated
+	if t == nil {
+		t = cs.State.Terminated
+	}
+	if t == nil || !isInitFailure(t) {
+		return r
+	}
+	for _, msg := range eventMessages {
+		if !hasOOMMarker(msg) {
+			continue
+		}
+		signals := make(map[string]string, len(r.Signals)+1)
+		for k, v := range r.Signals {
+			signals[k] = v
+		}
+		signals["events.message"] = msg
+		return Result{Type: OOMKilledDuringInit, Rule: "event-message-names-oom", Signals: signals}
+	}
+	return r
+}
+
+// initFailureReasons are the termination reasons the runtime reports when the
+// container could not be started at all, as opposed to having run and exited.
+var initFailureReasons = map[string]bool{
+	"StartError":         true,
+	"ContainerCannotRun": true,
+}
+
+func isInitFailure(t *corev1.ContainerStateTerminated) bool {
+	return initFailureReasons[t.Reason]
+}
+
 func classifyWaitingCrashLoop(cs *corev1.ContainerStatus) (Result, bool) {
 	if !isCrashLoopWaiting(cs) {
 		return Result{}, false

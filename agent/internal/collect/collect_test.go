@@ -45,11 +45,15 @@ func TestFixturesClassifyAndCollect(t *testing.T) {
 			wantFromPrev: false,
 		},
 		{
+			// The kubelet answered with an empty body and no error: the
+			// container was created, so a log stream exists, but init was
+			// killed before anything could write to it. Available and empty.
 			fixture:      "oom-startError",
 			wantType:     classify.OOMKilledDuringInit,
 			wantRule:     "terminated-message-names-oom",
 			wantExitCode: 128,
-			wantLogs:     false,
+			wantLogs:     true,
+			wantFromPrev: true,
 		},
 	}
 
@@ -228,24 +232,44 @@ func TestEnvValuesAreNeverCollected(t *testing.T) {
 	}
 }
 
-// TestLogsUnavailableIsDistinctFromEmpty covers the OOM case, where the
-// runtime reclaimed the container and no log body exists at all.
+// TestLogsUnavailableIsDistinctFromEmpty checks the two facts the contract
+// keeps apart. An image pull never created a container, so there is nothing
+// to retrieve; the init kill created one that wrote nothing, so the kubelet
+// returns an empty body with no error. Both carry no text, and they are
+// different facts with different ceilings.
 func TestLogsUnavailableIsDistinctFromEmpty(t *testing.T) {
-	c, pod, _ := loadFixture(t, "oom-startError")
-	result, container := classify.Pod(pod)
-	got, err := c.Collect(context.Background(), pod, container, result)
-	if err != nil {
-		t.Fatalf("Collect() error: %v", err)
-	}
-	if got.Logs.Available {
-		t.Error("Logs.Available = true, want false for a reclaimed container")
-	}
-	if !got.Logs.Empty {
-		t.Error("Logs.Empty = false, want true when nothing was retrieved")
-	}
-	if got.Logs.Content != "" {
-		t.Errorf("Logs.Content = %q, want empty", got.Logs.Content)
-	}
+	t.Run("nothing to retrieve", func(t *testing.T) {
+		c, pod, _ := loadFixture(t, "imagepullbackoff")
+		result, container := classify.Pod(pod)
+		got, err := c.Collect(context.Background(), pod, container, result)
+		if err != nil {
+			t.Fatalf("Collect() error: %v", err)
+		}
+		if got.Logs.Available {
+			t.Error("Logs.Available = true, want false when no container was ever created")
+		}
+		if !got.Logs.Empty {
+			t.Error("Logs.Empty = false, want true when nothing was retrieved")
+		}
+	})
+
+	t.Run("retrieved and empty", func(t *testing.T) {
+		c, pod, _ := loadFixture(t, "oom-startError")
+		result, container := classify.Pod(pod)
+		got, err := c.Collect(context.Background(), pod, container, result)
+		if err != nil {
+			t.Fatalf("Collect() error: %v", err)
+		}
+		if !got.Logs.Available {
+			t.Error("Logs.Available = false, want true: the kubelet answered, with an empty body")
+		}
+		if !got.Logs.Empty {
+			t.Error("Logs.Empty = false, want true when the container wrote nothing")
+		}
+		if got.Logs.Content != "" {
+			t.Errorf("Logs.Content = %q, want empty", got.Logs.Content)
+		}
+	})
 }
 
 // TestDerivedFieldsComputedInAgent confirms the rate is calculated here rather

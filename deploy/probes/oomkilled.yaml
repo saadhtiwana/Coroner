@@ -1,0 +1,34 @@
+# Recreates the recorded OOMKilled incident: a process that grows past a 128Mi
+# limit while running. The kernel sends SIGKILL, so the log stops mid-stream
+# with no fatal line. docs/DESIGN.md section 2.2.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-oom
+  namespace: default
+  labels:
+    coroner.dev/purpose: probe
+spec:
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: hog
+      image: redis:alpine
+      imagePullPolicy: Never
+      resources:
+        requests:
+          memory: 128Mi
+        limits:
+          memory: 128Mi
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          echo "[startup] report-worker booting"
+          chunk=$(head -c 16777216 /dev/zero | tr '\0' 'x')
+          acc=""; i=0
+          while [ $i -lt 40 ]; do
+            acc="$acc$chunk"; i=$((i+1))
+            echo "[index] segment $i (~$((i*16))MiB)"
+          done
+          echo "[index] build complete"
+          sleep 3600

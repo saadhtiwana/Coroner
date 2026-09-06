@@ -43,40 +43,47 @@ func readJSON(t *testing.T, path string, into any) {
 //
 // kubectl writes its retrieval failure into the captured file, so a recording
 // that begins with that text is replayed as an error, which is what the API
-// returns in the same situation.
+// returns in the same situation. A recording that exists but is empty is
+// replayed as an empty body with no error, which is what the API returns for a
+// container that started and wrote nothing. The two are different facts and
+// the contract keeps them apart, so the replay has to as well.
 type fixtureLogFetcher struct {
-	prev    string
-	current string
+	prev    recordedLog
+	current recordedLog
+}
+
+type recordedLog struct {
+	body   string
+	exists bool
 }
 
 func (f fixtureLogFetcher) Fetch(_ context.Context, _, _, _ string, previous bool, _ int64) (string, error) {
-	body := f.current
+	rec := f.current
 	if previous {
-		body = f.prev
+		rec = f.prev
 	}
-	if isRetrievalFailure(body) {
+	if !rec.exists || isRetrievalFailure(rec.body) {
 		return "", fmt.Errorf("unable to retrieve container logs")
 	}
-	return body, nil
+	return rec.body, nil
 }
 
 func isRetrievalFailure(s string) bool {
 	trimmed := strings.TrimSpace(s)
-	return trimmed == "" ||
-		strings.HasPrefix(trimmed, "unable to retrieve container logs") ||
+	return strings.HasPrefix(trimmed, "unable to retrieve container logs") ||
 		strings.HasPrefix(trimmed, "(no previous logs available)") ||
 		strings.HasPrefix(trimmed, "(no current logs available)") ||
 		strings.Contains(trimmed, "previous terminated container") ||
 		strings.Contains(trimmed, "not found")
 }
 
-func readText(t *testing.T, path string) string {
+func readLog(t *testing.T, path string) recordedLog {
 	t.Helper()
 	b, err := os.ReadFile(path) //nolint:gosec // test-only path under the repo
 	if err != nil {
-		return ""
+		return recordedLog{}
 	}
-	return string(b)
+	return recordedLog{body: string(b), exists: true}
 }
 
 // loadFixture builds a fake cluster from one recorded incident.
@@ -109,8 +116,8 @@ func loadFixture(t *testing.T, name string) (*Collector, *corev1.Pod, []corev1.E
 
 	client := fake.NewSimpleClientset(objects...)
 	c := New(client, fixtureLogFetcher{
-		prev:    readText(t, filepath.Join(dir, "logs-previous.txt")),
-		current: readText(t, filepath.Join(dir, "logs-current.txt")),
+		prev:    readLog(t, filepath.Join(dir, "logs-previous.txt")),
+		current: readLog(t, filepath.Join(dir, "logs-current.txt")),
 	})
 	// Fixed clock so age and rate are deterministic. Chosen to sit after every
 	// recorded timestamp.

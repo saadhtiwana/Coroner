@@ -35,6 +35,7 @@ type Verdict struct {
 	FailureType   string `json:"failure_type"`
 	Outcome       string `json:"outcome"`
 	EvidenceClass string `json:"evidence_class"`
+	ContextHash   string `json:"context_hash"`
 
 	RootCause           string `json:"root_cause"`
 	Explanation         string `json:"explanation"`
@@ -155,4 +156,108 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// ApprovedIncident is a ledger row whose decision authorises an action and
+// which the agent has not yet acted on. The fields are the ones the agent
+// verifies the token against and plans from.
+type ApprovedIncident struct {
+	IncidentID     string `json:"incident_id"`
+	FailureType    string `json:"failure_type"`
+	ContextHash    string `json:"context_hash"`
+	Decision       string `json:"decision"`
+	DecisionAction string `json:"decision_action"`
+	DecisionAt     string `json:"decision_at"`
+	ApprovalToken  string `json:"approval_token"`
+	ContractJSON   string `json:"contract_json"`
+}
+
+// Approved lists incidents awaiting execution. With execute false the brain
+// also withholds rows already recorded as proposed, so a proposal is emitted
+// once rather than on every poll.
+func (c *Client) Approved(ctx context.Context, execute bool) ([]ApprovedIncident, error) {
+	u := c.baseURL + "/incidents/approved"
+	if execute {
+		u += "?execute=true"
+	}
+	var out []ApprovedIncident
+	if err := c.getJSON(ctx, u, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExecutionReport is what the agent tells the brain it did with an approval.
+// status is one of proposed, refused, executed, failed.
+type ExecutionReport struct {
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+	Plan   any    `json:"plan,omitempty"`
+}
+
+// ReportExecution records the execution outcome on the ledger row.
+func (c *Client) ReportExecution(ctx context.Context, incidentID string, report ExecutionReport) error {
+	return c.postJSON(ctx, c.baseURL+"/incidents/"+incidentID+"/execution", report)
+}
+
+// ResolutionReport is the section 5.2 label after an executed action.
+type ResolutionReport struct {
+	ReadyWithinSLA bool   `json:"ready_within_sla"`
+	StayedReady    bool   `json:"stayed_ready"`
+	Resolved       bool   `json:"resolved"`
+	Detail         string `json:"detail"`
+}
+
+// ReportResolution records whether the workload recovered and stayed up.
+func (c *Client) ReportResolution(ctx context.Context, incidentID string, report ResolutionReport) error {
+	return c.postJSON(ctx, c.baseURL+"/incidents/"+incidentID+"/resolution", report)
+}
+
+func (c *Client) getJSON(ctx context.Context, u string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("reaching brain: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return fmt.Errorf("reading brain response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("brain returned %d: %s", resp.StatusCode, truncate(string(raw), 300))
+	}
+	if err := json.Unmarshal(raw, into); err != nil {
+		return fmt.Errorf("decoding brain response: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) postJSON(ctx context.Context, u string, body any) error {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("reaching brain: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return fmt.Errorf("reading brain response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("brain returned %d: %s", resp.StatusCode, truncate(string(raw), 300))
+	}
+	return nil
 }

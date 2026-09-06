@@ -158,7 +158,7 @@ class DiagnosisPipeline:
                 remaining,
                 system=prompts.system_prompt(contract.failure_type),
                 user=prompts.user_prompt(
-                    json.dumps(payload, indent=2), state.get("validation_failures") or None
+                    prompts.render_contract(payload), state.get("validation_failures") or None
                 ),
             )
         except ModelUnavailableError as exc:

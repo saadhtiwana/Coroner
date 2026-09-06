@@ -465,3 +465,24 @@ def test_cost_is_summed_over_retries_and_zero_at_the_gate(
     assert row is not None
     assert row["prompt_tokens"] == 0
     assert row["cost_usd"] == 0.0
+
+
+def test_the_prompt_carries_the_contract_compactly_and_completely(
+    imagepull: Contract, ledger: Ledger
+) -> None:
+    from coroner_brain import prompts
+
+    payload = imagepull.model_dump(mode="json")
+    rendered = prompts.render_contract(payload)
+    assert "\n" not in rendered
+    assert json.loads(rendered) == payload, "compact, and nothing dropped"
+    # Measured on this contract: 4134 characters compact against 5044 indented.
+    assert len(rendered) < len(json.dumps(payload, indent=2)) * 0.9
+
+    client = ScriptedClient(
+        [_answer(evidence=[{"source": "x", "field": "logs.nope", "value": "x"}])] * 2
+    )
+    DiagnosisPipeline(client=client, ledger=ledger).run(imagepull)
+    _, user = client.calls[0]
+    assert rendered in user
+    assert prompts.PROMPT_VERSION == "3"

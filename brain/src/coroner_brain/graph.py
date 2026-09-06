@@ -30,6 +30,8 @@ from coroner_brain.evidence import EvidenceClass, ceiling, classify_evidence, ga
 from coroner_brain.ledger import Ledger, LedgerEntry
 from coroner_brain.llm import LLMClient, Usage
 from coroner_brain.schema import strict_schema
+from coroner_brain.tracing import annotate, capture, resume, span
+from coroner_brain.tracing import detach as detach_context
 from coroner_brain.validate import ValidationReport, validate
 
 
@@ -116,31 +118,57 @@ class DiagnosisPipeline:
 
     def classify(self, state: State) -> State:
         contract = state["contract"]
-        payload = contract.model_dump(mode="json")
-        return {
-            "payload": payload,
-            "context_hash": _context_hash(payload),
-            "evidence_class": classify_evidence(contract).value,
-            "attempts": 0,
-            "validation_failures": [],
-            "started_at": self._clock(),
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-        }
+        with span("graph.classify", incident_id=contract.incident_id) as current:
+            payload = contract.model_dump(mode="json")
+            evidence_class = classify_evidence(contract).value
+            current.set_attribute("evidence_class", evidence_class)
+            current.set_attribute("failure_type", contract.failure_type)
+            current.set_attribute("logs_available", contract.logs.available)
+            current.set_attribute("logs_empty", contract.logs.empty)
+            return {
+                "payload": payload,
+                "context_hash": _context_hash(payload),
+                "evidence_class": evidence_class,
+                "attempts": 0,
+                "validation_failures": [],
+                "started_at": self._clock(),
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            }
 
     def evidence_gate(self, state: State) -> State:
         """Deterministic. Runs before any model call and may end the run."""
         contract = state["contract"]
         evidence_class = EvidenceClass(state["evidence_class"])
-        abstain, reason = gate(contract, evidence_class)
-        if abstain:
-            return {"outcome": Outcome.INSUFFICIENT_CONTEXT.value, "abstain_reason": reason}
-        return {"outcome": ""}
+        with span(
+            "graph.evidence_gate",
+            evidence_class=evidence_class.value,
+            ceiling=ceiling(evidence_class),
+        ) as current:
+            abstain, reason = gate(contract, evidence_class)
+            current.set_attribute("abstained_before_model", abstain)
+            if abstain:
+                current.set_attribute("abstain_reason", reason)
+                return {"outcome": Outcome.INSUFFICIENT_CONTEXT.value, "abstain_reason": reason}
+            return {"outcome": ""}
 
     def diagnose(self, state: State) -> State:
+        attempts = state.get("attempts", 0) + 1
+        with span("graph.diagnose", attempt=attempts, retry=attempts > 1) as current:
+            result = self._diagnose(state, attempts)
+            if result.get("outcome"):
+                current.set_attribute("outcome", result["outcome"])
+            confidence = result.get("confidence_model")
+            if confidence is not None:
+                current.set_attribute("confidence_model", confidence)
+            reason = result.get("discard_reason")
+            if reason:
+                current.set_attribute("discard_reason", reason)
+            return result
+
+    def _diagnose(self, state: State, attempts: int) -> State:
         contract = state["contract"]
         payload = state["payload"]
-        attempts = state.get("attempts", 0) + 1
 
         remaining = self._deadline - (self._clock() - state.get("started_at", self._clock()))
         if remaining <= 0:
@@ -221,18 +249,27 @@ class DiagnosisPipeline:
         """
         result: queue.Queue[tuple[str | None, BaseException | None]] = queue.Queue(maxsize=1)
 
+        # The call runs on another thread, and the trace context is
+        # thread-local, so it is carried across by hand. Without this the
+        # model span becomes the root of a second trace.
+        parent = capture()
+
         def run() -> None:
+            token = resume(parent)
             try:
-                result.put(
-                    (
-                        self._client.complete_json(
-                            system=system, user=user, schema=self._schema, schema_name="diagnosis"
-                        ),
-                        None,
+                with span("model.complete", model_id=self._client.model_id) as current:
+                    text = self._client.complete_json(
+                        system=system, user=user, schema=self._schema, schema_name="diagnosis"
                     )
-                )
+                    usage = getattr(self._client, "last_usage", None)
+                    if usage is not None:
+                        current.set_attribute("prompt_tokens", usage.prompt_tokens)
+                        current.set_attribute("completion_tokens", usage.completion_tokens)
+                    result.put((text, None))
             except BaseException as exc:  # reported to the caller, not swallowed
                 result.put((None, exc))
+            finally:
+                detach_context(token)
 
         started = self._clock()
         waited_for_limit = 0.0
@@ -275,18 +312,29 @@ class DiagnosisPipeline:
 
     def validate_node(self, state: State) -> State:
         diagnosis = state.get("diagnosis")
-        if diagnosis is None:
-            return {}
+        with span("graph.validate", attempt=state.get("attempts", 0)) as current:
+            if diagnosis is None:
+                current.set_attribute("validation_ok", False)
+                current.set_attribute(
+                    "validation_failures", "; ".join(state.get("validation_failures") or [])
+                )
+                return {}
 
-        report: ValidationReport = validate(diagnosis, state["payload"])
-        if not report.ok:
-            return {"validation_failures": report.failures}
+            report: ValidationReport = validate(diagnosis, state["payload"])
+            current.set_attribute("validation_ok", report.ok)
+            current.set_attribute("citations", len(diagnosis.evidence))
+            if not report.ok:
+                current.set_attribute("validation_failures", "; ".join(report.failures))
+                return {"validation_failures": report.failures}
 
-        # Section 4.2 control 3: the ceiling is deterministic and the model may
-        # only lower its confidence, never raise it.
-        cap = ceiling(EvidenceClass(state["evidence_class"]))
-        final = min(diagnosis.confidence, cap)
-        return {"validation_failures": [], "confidence_final": final}
+            # Section 4.2 control 3: the ceiling is deterministic and the model
+            # may only lower its confidence, never raise it.
+            cap = ceiling(EvidenceClass(state["evidence_class"]))
+            final = min(diagnosis.confidence, cap)
+            current.set_attribute("confidence_model", diagnosis.confidence)
+            current.set_attribute("confidence_ceiling", cap)
+            current.set_attribute("confidence_final", final)
+            return {"validation_failures": [], "confidence_final": final}
 
     def diagnosed(self, state: State) -> State:
         return {"outcome": Outcome.DIAGNOSED.value}
@@ -356,9 +404,22 @@ class DiagnosisPipeline:
 
     def run(self, contract: Contract) -> State:
         """Run the pipeline and record the result before returning it."""
-        final: State = self._graph.invoke({"contract": contract})
-        self._record(contract, final)
-        return final
+        with span(
+            "graph.run", incident_id=contract.incident_id, failure_type=contract.failure_type
+        ):
+            final: State = self._graph.invoke({"contract": contract})
+            with span("ledger.record"):
+                self._record(contract, final)
+            annotate(
+                outcome=final.get("outcome", ""),
+                evidence_class=final.get("evidence_class", ""),
+                confidence_final=final.get("confidence_final"),
+                validation_retried=final.get("attempts", 0) > 1,
+                attempts=final.get("attempts", 0),
+                prompt_tokens=final.get("prompt_tokens", 0),
+                completion_tokens=final.get("completion_tokens", 0),
+            )
+            return final
 
     def _record(self, contract: Contract, state: State) -> None:
         diagnosis = state.get("diagnosis")

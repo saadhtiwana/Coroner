@@ -23,9 +23,10 @@ from urllib.parse import parse_qs
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from opentelemetry.trace import SpanKind
 from pydantic import BaseModel, Field
 
-from coroner_brain import CONTRACT_VERSION, __version__
+from coroner_brain import CONTRACT_VERSION, __version__, tracing
 from coroner_brain.approval import ApprovalError, ApprovalPipeline
 from coroner_brain.config import Settings, load_settings
 from coroner_brain.contract import Contract
@@ -268,6 +269,8 @@ class Sweeper:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> Any:  # noqa: ANN401 - FastAPI's lifespan contract
+    mode = tracing.configure()
+    log.info("tracing: %s", mode)
     services = get_services()
     sweeper = Sweeper(services.approvals, EXPIRY_SWEEP_SECONDS)
     sweeper.start()
@@ -311,20 +314,35 @@ def healthz(services: ServicesDep) -> Health:
 
 
 @app.post("/diagnose")
-def diagnose(contract: Contract, services: ServicesDep) -> DiagnoseResponse:
-    response = build_response(services.pipeline, contract, services.settings.abstention_threshold)
-    return deliver(response, contract, services)
+def diagnose(contract: Contract, services: ServicesDep, request: Request) -> DiagnoseResponse:
+    # Continue the agent's trace, so one trace covers collection to sink.
+    token = tracing.attach_incoming(request.headers)
+    try:
+        with tracing.span(
+            "brain.diagnose",
+            kind=SpanKind.SERVER,
+            incident_id=contract.incident_id,
+            failure_type=contract.failure_type,
+        ):
+            response = build_response(
+                services.pipeline, contract, services.settings.abstention_threshold
+            )
+            return deliver(response, contract, services)
+    finally:
+        tracing.detach(token)
 
 
 @app.post("/incidents/{incident_id}/decision")
 def decide(incident_id: str, body: DecisionRequest, services: ServicesDep) -> DecisionResponse:
     """Resume the parked incident with a human decision."""
-    try:
-        outcome = services.approvals.decide(
-            incident_id, body.decision, reason=body.reason, action=body.action
-        )
-    except ApprovalError as exc:
-        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    with tracing.span("approval.decide", incident_id=incident_id, decision=body.decision):
+        try:
+            outcome = services.approvals.decide(
+                incident_id, body.decision, reason=body.reason, action=body.action
+            )
+        except ApprovalError as exc:
+            tracing.annotate(refused=exc.detail)
+            raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     log.info("incident %s %s", incident_id, outcome.decision)
     return DecisionResponse(
         incident_id=incident_id,
@@ -682,9 +700,23 @@ def deliver(response: DiagnoseResponse, contract: Contract, services: Services) 
         deadline=parked.deadline if parked else None,
         public_url=settings.public_url,
     )
-    try:
-        services.sink.deliver(notice)
-    except Exception:  # a sink failure must not lose the verdict
-        log.exception("sink %s failed for incident %s", services.sink.name, response.incident_id)
-        return response.model_copy(update={"delivered": False, "mode": mode})
+    with tracing.span(
+        "sink.deliver",
+        sink=services.sink.name,
+        mode=mode,
+        offers_approval=notice.offers_approval,
+        outcome=response.outcome.value,
+        evidence_class=response.evidence_class,
+        confidence_final=response.confidence_final,
+    ) as current:
+        try:
+            services.sink.deliver(notice)
+        except Exception as exc:  # a sink failure must not lose the verdict
+            log.exception(
+                "sink %s failed for incident %s", services.sink.name, response.incident_id
+            )
+            current.record_exception(exc)
+            current.set_attribute("delivered", False)
+            return response.model_copy(update={"delivered": False, "mode": mode})
+        current.set_attribute("delivered", True)
     return response.model_copy(update={"delivered": True, "mode": mode})

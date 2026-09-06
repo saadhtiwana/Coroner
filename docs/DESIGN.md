@@ -1122,6 +1122,33 @@ assumed.
 
 **Ratified as implemented.**
 
+### 6.19 Tracing explains a decision, and works with no backend
+
+**Decision:** OpenTelemetry spans cover the whole path, agent collection, the
+HTTP call, each graph node, the model call, validation, the sink, and an
+approval. The console exporter is the default in both services, so tracing
+works with nothing installed; OTLP is one environment variable. Spans go to
+stderr, so stdout still carries only contracts and rendered verdicts.
+
+Timing alone would not have been worth the dependency. What makes it worth it
+is that the spans carry the facts that decided the outcome: the evidence
+class and the ceiling it implies, whether the gate abstained before any model
+call, the token counts, whether validation retried and which citation failed,
+the final confidence, and whether an approve affordance was offered. Reading
+one incident's trace answers "why did Coroner say that" without opening the
+ledger, which is the question this project exists to make answerable. The
+tests assert those attributes rather than the shape of the trace, because a
+trace that claims to explain a decision is worth testing.
+
+Two consequences worth stating. The agent injects the trace context on the
+call to the brain, so one trace covers collection in the cluster through to
+delivery in a sink rather than two disconnected halves. And the brain's
+tracing module keeps its own provider reference as well as installing the
+global one, because the OpenTelemetry global refuses replacement once set and
+a test needs an in-memory exporter.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability

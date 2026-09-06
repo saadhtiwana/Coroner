@@ -17,6 +17,11 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/saadhtiwana/coroner/agent/internal/contract"
 )
 
@@ -83,10 +88,41 @@ func New(baseURL string, timeout time.Duration) (*Client, error) {
 // contract is sent exactly as it would be written to stdout, so what the brain
 // receives is what the agent would have shown.
 func (c *Client) Diagnose(ctx context.Context, con *contract.Contract) (*Verdict, error) {
+	// The client span carries the trace context to the brain, so the brain's
+	// spans hang under this one and a single trace runs from collection to
+	// sink. The verdict's facts are added when it arrives.
+	ctx, span := otel.Tracer("coroner-agent").Start(ctx, "brain.diagnose",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("incident_id", con.IncidentID),
+			attribute.String("failure_type", con.FailureType),
+			attribute.Int("contract_bytes", 0),
+		),
+	)
+	defer span.End()
+
+	v, err := c.diagnose(ctx, con, span)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	span.SetAttributes(
+		attribute.String("outcome", v.Outcome),
+		attribute.String("evidence_class", v.EvidenceClass),
+		attribute.Bool("approvable", v.Approvable),
+	)
+	if v.ConfidenceFinal != nil {
+		span.SetAttributes(attribute.Float64("confidence_final", *v.ConfidenceFinal))
+	}
+	return v, nil
+}
+
+func (c *Client) diagnose(ctx context.Context, con *contract.Contract, span trace.Span) (*Verdict, error) {
 	body, err := json.Marshal(con)
 	if err != nil {
 		return nil, fmt.Errorf("encoding contract %s: %w", con.IncidentID, err)
 	}
+	span.SetAttributes(attribute.Int("contract_bytes", len(body)))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/diagnose", bytes.NewReader(body))
 	if err != nil {
@@ -94,6 +130,7 @@ func (c *Client) Diagnose(ctx context.Context, con *contract.Contract) (*Verdict
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -105,6 +142,7 @@ func (c *Client) Diagnose(ctx context.Context, con *contract.Contract) (*Verdict
 	if err != nil {
 		return nil, fmt.Errorf("reading brain response for %s: %w", con.IncidentID, err)
 	}
+	span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("brain returned %d for %s: %s", resp.StatusCode, con.IncidentID, truncate(string(raw), 500))
 	}

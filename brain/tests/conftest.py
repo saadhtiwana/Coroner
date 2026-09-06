@@ -6,6 +6,7 @@ a live kind cluster, not hand-written examples.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,10 @@ import pytest
 from coroner_brain.contract import Contract
 
 CONTRACTS = Path(__file__).parent / "contracts"
+
+# Tracing is off unless a test asks for it, so the suite does not print spans
+# to stderr. tests/test_tracing.py installs its own exporter.
+os.environ.setdefault("CORONER_TRACING", "off")
 
 
 def load_contract(name: str) -> Contract:

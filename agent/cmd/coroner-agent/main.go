@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -33,6 +34,7 @@ import (
 	"github.com/saadhtiwana/coroner/agent/internal/contract"
 	"github.com/saadhtiwana/coroner/agent/internal/kube"
 	"github.com/saadhtiwana/coroner/agent/internal/remediate"
+	"github.com/saadhtiwana/coroner/agent/internal/tracing"
 )
 
 var version = "dev"
@@ -57,6 +59,7 @@ type options struct {
 	remediateInterval time.Duration
 	resolveReadyIn    time.Duration
 	resolveStableFor  time.Duration
+	tracing           string
 }
 
 func main() {
@@ -92,6 +95,7 @@ func parseFlags() options {
 	flag.DurationVar(&o.remediateInterval, "remediate-interval", 30*time.Second, "how often to ask the brain for approved incidents")
 	flag.DurationVar(&o.resolveReadyIn, "resolve-ready-within", 10*time.Minute, "window for the workload to reach Ready after an executed action (section 5.2)")
 	flag.DurationVar(&o.resolveStableFor, "resolve-stable-for", 30*time.Minute, "how long the workload must stay Ready to count as resolved (section 5.2)")
+	flag.StringVar(&o.tracing, "tracing", "", "console, otlp, or off; empty reads CORONER_TRACING and defaults to console")
 	flag.Parse()
 	return o
 }
@@ -106,6 +110,17 @@ func run(opts options, logger *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	shutdownTracing, tracingMode, err := tracing.Setup(ctx, opts.tracing, version, os.Stderr)
+	if err != nil {
+		return fmt.Errorf("configuring tracing: %w", err)
+	}
+	defer func() {
+		if shutdownErr := shutdownTracing(context.Background()); shutdownErr != nil {
+			logger.Warn("tracing shutdown", "error", shutdownErr)
+		}
+	}()
+	logger.Info("tracing", "mode", tracingMode)
 
 	handler, err := newHandler(ctx, opts, logger)
 	if err != nil {
@@ -345,10 +360,30 @@ func watch(ctx context.Context, client kubernetes.Interface, collector *collect.
 }
 
 func emitOne(ctx context.Context, collector *collect.Collector, h handler, pod *corev1.Pod, container string, result classify.Result, logger *slog.Logger) error {
-	c, err := collector.Collect(ctx, pod, container, result)
+	// One span per incident, from collection to whatever the handler does
+	// with it. The classification that triggered collection is recorded
+	// here; what collection found is added once it has run.
+	ctx, span := tracing.Start(ctx, "agent.incident",
+		attribute.String("pod", pod.Namespace+"/"+pod.Name),
+		attribute.String("container", container),
+		attribute.String("classify.rule", result.Rule),
+		attribute.String("classify.type", string(result.Type)),
+	)
+	defer span.End()
+
+	c, err := collectTraced(ctx, collector, pod, container, result)
 	if err != nil {
+		tracing.Fail(span, err)
 		return fmt.Errorf("collecting contract for %s/%s container %s: %w", pod.Namespace, pod.Name, container, err)
 	}
+	span.SetAttributes(
+		attribute.String("incident_id", c.IncidentID),
+		attribute.String("failure_type", c.FailureType),
+		attribute.Bool("logs_available", c.Logs.Available),
+		attribute.Bool("logs_empty", c.Logs.Empty),
+		attribute.Int("events", len(c.Events)),
+		attribute.Int("redacted", c.RedactedCount),
+	)
 	logger.Info("failure detected",
 		"pod", pod.Namespace+"/"+pod.Name,
 		"container", container,
@@ -357,7 +392,25 @@ func emitOne(ctx context.Context, collector *collect.Collector, h handler, pod *
 		"incident_id", c.IncidentID,
 		"logs_available", c.Logs.Available,
 	)
-	return h.handle(ctx, c)
+	if err := h.handle(ctx, c); err != nil {
+		tracing.Fail(span, err)
+		return err
+	}
+	return nil
+}
+
+func collectTraced(ctx context.Context, collector *collect.Collector, pod *corev1.Pod, container string, result classify.Result) (*contract.Contract, error) {
+	ctx, span := tracing.Start(ctx, "agent.collect")
+	defer span.End()
+	c, err := collector.Collect(ctx, pod, container, result)
+	if err != nil {
+		tracing.Fail(span, err)
+		return nil, fmt.Errorf("collect: %w", err)
+	}
+	if c.FailureType != string(result.Type) {
+		span.SetAttributes(attribute.String("classify.refined_to", c.FailureType))
+	}
+	return c, nil
 }
 
 func restartCount(pod *corev1.Pod, container string) int32 {

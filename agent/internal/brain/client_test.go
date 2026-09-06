@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/saadhtiwana/coroner/agent/internal/contract"
+	"github.com/saadhtiwana/coroner/agent/internal/tracing"
 )
 
 func sample() *contract.Contract {
@@ -116,6 +118,37 @@ func TestNewRejectsBadURLs(t *testing.T) {
 	}
 	if _, err := New("http://localhost:8000/", 0); err != nil {
 		t.Errorf("New(valid) failed: %v", err)
+	}
+}
+
+// The brain's spans hang under the agent's only if the trace context
+// travels on the request.
+func TestDiagnosePropagatesTheTraceContext(t *testing.T) {
+	var traceparent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		traceparent = r.Header.Get("traceparent")
+		_, _ = w.Write([]byte(`{"incident_id":"inc-abc","outcome":"DIAGNOSED","context_hash":"h1"}`))
+	}))
+	defer srv.Close()
+
+	shutdown, _, err := tracing.Setup(context.Background(), "console", "test", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shutdown(context.Background()) }()
+
+	ctx, span := tracing.Start(context.Background(), "agent.incident")
+	c, _ := New(srv.URL, 0)
+	v, err := c.Diagnose(ctx, sample())
+	span.End()
+	if err != nil {
+		t.Fatalf("Diagnose() error: %v", err)
+	}
+	if v.ContextHash != "h1" {
+		t.Errorf("ContextHash = %q, want h1", v.ContextHash)
+	}
+	if !strings.HasPrefix(traceparent, "00-") {
+		t.Errorf("traceparent = %q, want a W3C header so the brain joins this trace", traceparent)
 	}
 }
 

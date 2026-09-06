@@ -35,6 +35,7 @@ from coroner_brain.inflight import InFlightStore, build_store
 from coroner_brain.ledger import (
     AlreadyLabelledError,
     Ledger,
+    NotExecutableError,
     NotRatableError,
     UnknownIncidentError,
 )
@@ -103,6 +104,33 @@ class LabelResponse(BaseModel):
     incident_id: str
     field: str
     value: str
+
+
+class ExecutionRequest(BaseModel):
+    status: Literal["proposed", "refused", "executed", "failed"]
+    detail: str = ""
+    plan: dict[str, Any] | None = None
+
+
+class ResolutionRequest(BaseModel):
+    ready_within_sla: bool
+    stayed_ready: bool
+    resolved: bool
+    detail: str = ""
+
+
+class ApprovedResponse(BaseModel):
+    """What the agent needs to verify the token and plan the action."""
+
+    incident_id: str
+    failure_type: str
+    context_hash: str
+    decision: str
+    decision_action: str
+    decision_at: str
+    approval_token: str
+    contract_json: str
+    execution_status: str = ""
 
 
 class PendingResponse(BaseModel):
@@ -333,6 +361,72 @@ def pending(services: ServicesDep) -> list[PendingResponse]:
         )
         for p in services.approvals.pending()
     ]
+
+
+@app.get("/incidents/approved")
+def approved(services: ServicesDep, execute: bool = False) -> list[ApprovedResponse]:
+    """Rows the agent may act on. The agent verifies the token itself."""
+    return [
+        ApprovedResponse(
+            incident_id=str(r["incident_id"]),
+            failure_type=str(r["failure_type"]),
+            context_hash=str(r.get("context_hash") or ""),
+            decision=str(r.get("decision") or ""),
+            decision_action=str(r.get("decision_action") or ""),
+            decision_at=str(r.get("decision_at") or ""),
+            approval_token=str(r.get("approval_token") or ""),
+            contract_json=str(r.get("contract_json") or ""),
+            execution_status=str(r.get("execution_status") or ""),
+        )
+        for r in services.ledger.approved(include_proposed=execute)
+    ]
+
+
+@app.post("/incidents/{incident_id}/execution")
+def execution(incident_id: str, body: ExecutionRequest, services: ServicesDep) -> LabelResponse:
+    """What the agent did with the approval."""
+    detail = body.detail
+    if body.plan is not None:
+        detail = json.dumps({"detail": body.detail, "plan": body.plan}, sort_keys=True)
+    try:
+        services.ledger.record_execution(incident_id, status=body.status, detail=detail)
+    except UnknownIncidentError as exc:
+        raise HTTPException(status_code=404, detail="no such incident") from exc
+    except NotExecutableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AlreadyLabelledError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"{exc.field} already recorded as {exc.existing!r}"
+        ) from exc
+    log.info("incident %s execution %s", incident_id, body.status)
+    return LabelResponse(incident_id=incident_id, field="execution_status", value=body.status)
+
+
+@app.post("/incidents/{incident_id}/resolution")
+def resolution(incident_id: str, body: ResolutionRequest, services: ServicesDep) -> LabelResponse:
+    """Section 5.2: did the workload recover and stay up after the action."""
+    detail = json.dumps(
+        {
+            "ready_within_sla": body.ready_within_sla,
+            "stayed_ready": body.stayed_ready,
+            "detail": body.detail,
+        },
+        sort_keys=True,
+    )
+    try:
+        services.ledger.record_resolution(incident_id, resolved=body.resolved, detail=detail)
+    except UnknownIncidentError as exc:
+        raise HTTPException(status_code=404, detail="no such incident") from exc
+    except NotExecutableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AlreadyLabelledError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"{exc.field} already recorded as {exc.existing!r}"
+        ) from exc
+    log.info("incident %s resolved=%s", incident_id, body.resolved)
+    return LabelResponse(
+        incident_id=incident_id, field="resolved_within_sla", value=str(body.resolved).lower()
+    )
 
 
 @app.get("/incidents/{incident_id}")

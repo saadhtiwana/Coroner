@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Columns added after version 1, applied with ALTER TABLE on an existing file
 # so a ledger recorded under the old schema keeps its rows. Append-only
@@ -42,6 +42,16 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         # Why a DISCARDED row was discarded: the model did not answer in time
         # or the call failed. Section 6.16.
         "ALTER TABLE diagnoses ADD COLUMN discard_reason TEXT NOT NULL DEFAULT ''",
+    ),
+    5: (
+        # What the agent did with an approval, and what happened next.
+        # execution_status is proposed, refused, executed, or failed;
+        # resolution is the section 5.2 label after an executed action.
+        "ALTER TABLE diagnoses ADD COLUMN execution_status TEXT",
+        "ALTER TABLE diagnoses ADD COLUMN execution_detail TEXT",
+        "ALTER TABLE diagnoses ADD COLUMN executed_at TEXT",
+        "ALTER TABLE diagnoses ADD COLUMN resolution_detail TEXT",
+        "ALTER TABLE diagnoses ADD COLUMN resolved_at TEXT",
     ),
 }
 
@@ -84,7 +94,12 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     decision_action   TEXT,
     approval_token    TEXT,
     contract_json     TEXT NOT NULL DEFAULT '',
-    discard_reason    TEXT NOT NULL DEFAULT ''
+    discard_reason    TEXT NOT NULL DEFAULT '',
+    execution_status  TEXT,
+    execution_detail  TEXT,
+    executed_at       TEXT,
+    resolution_detail TEXT,
+    resolved_at       TEXT
 );
 """
 
@@ -98,6 +113,14 @@ class NotRatableError(ValueError):
 
     def __init__(self, incident_id: str) -> None:
         super().__init__(f"{incident_id} was discarded; there is no diagnosis to rate")
+
+
+class NotExecutableError(ValueError):
+    """The row's decision does not authorise an action, or nothing ran."""
+
+    def __init__(self, incident_id: str, state: str) -> None:
+        super().__init__(f"{incident_id} cannot record execution: {state}")
+        self.state = state
 
 
 class AlreadyLabelledError(ValueError):
@@ -257,6 +280,57 @@ class Ledger:
                 f"UPDATE diagnoses SET {assignments} WHERE incident_id = :incident_id",
                 updates,
             )
+
+    def record_execution(self, incident_id: str, *, status: str, detail: str) -> None:
+        """What the agent did with the approval. Written once per status change
+        in the forward direction only: proposed may become executed, executed
+        may not become proposed again."""
+        current = self.get(incident_id)
+        if current is None:
+            raise UnknownIncidentError(incident_id)
+        if current.get("decision") not in ("approved", "edited"):
+            raise NotExecutableError(incident_id, str(current.get("decision") or "none"))
+        existing = current.get("execution_status")
+        if existing in ("executed", "failed", "refused") and status != existing:
+            raise AlreadyLabelledError(incident_id, "execution_status", str(existing))
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE diagnoses SET execution_status = ?, execution_detail = ?, executed_at = ? "
+                "WHERE incident_id = ?",
+                (status, detail, datetime.now(UTC).isoformat(), incident_id),
+            )
+
+    def record_resolution(self, incident_id: str, *, resolved: bool, detail: str) -> None:
+        """The section 5.2 label. Only an executed action can resolve."""
+        current = self.get(incident_id)
+        if current is None:
+            raise UnknownIncidentError(incident_id)
+        if current.get("execution_status") != "executed":
+            raise NotExecutableError(incident_id, "not executed")
+        if current.get("resolved_within_sla") is not None:
+            raise AlreadyLabelledError(
+                incident_id, "resolved_within_sla", str(current["resolved_within_sla"])
+            )
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE diagnoses SET resolved_within_sla = ?, resolution_detail = ?, "
+                "resolved_at = ? WHERE incident_id = ?",
+                (int(resolved), detail, datetime.now(UTC).isoformat(), incident_id),
+            )
+
+    def approved(self, *, include_proposed: bool) -> list[dict[str, Any]]:
+        """Rows whose decision authorises an action and which the agent has not
+        finished with. With include_proposed the rows already emitted as a
+        proposal are returned again, which is what an agent with execution
+        enabled needs."""
+        statuses = ("", "proposed") if include_proposed else ("",)
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM diagnoses WHERE decision IN ('approved', 'edited') "
+                "AND COALESCE(execution_status, '') IN (?, ?) ORDER BY decision_at",
+                (statuses[0], statuses[-1]),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def get(self, incident_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:

@@ -413,3 +413,87 @@ def test_build_sink_defaults_to_stdout_and_refuses_half_configured_slack(ledger:
         )
     )
     assert isinstance(sink, SlackSink)
+
+
+def test_approved_rows_flow_to_execution_and_resolution(
+    api: tuple[TestClient, Services, Recording, Clock], imagepull: Contract
+) -> None:
+    """The agent's side of the ledger: read the approval, say what it did."""
+    client, _, _, _ = api
+    client.post("/diagnose", json=imagepull.model_dump(mode="json"))
+    assert client.get("/incidents/approved").json() == [], "undecided rows are not approved"
+
+    client.post(f"/incidents/{imagepull.incident_id}/decision", json={"decision": "approved"})
+    rows = client.get("/incidents/approved").json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["approval_token"].startswith("v1.")
+    assert row["decision_action"] == "Fix the image reference."
+    assert json.loads(row["contract_json"])["incident_id"] == imagepull.incident_id
+
+    # Resolution before execution is refused.
+    early = client.post(
+        f"/incidents/{imagepull.incident_id}/resolution",
+        json={"ready_within_sla": True, "stayed_ready": True, "resolved": True},
+    )
+    assert early.status_code == 409
+
+    # A proposal is recorded and drops out of the default listing, but an
+    # executing agent still sees it.
+    proposed = client.post(
+        f"/incidents/{imagepull.incident_id}/execution",
+        json={"status": "proposed", "detail": "would patch", "plan": {"kind": "set-image"}},
+    )
+    assert proposed.status_code == 200
+    assert client.get("/incidents/approved").json() == []
+    assert len(client.get("/incidents/approved?execute=true").json()) == 1
+
+    executed = client.post(
+        f"/incidents/{imagepull.incident_id}/execution",
+        json={"status": "executed", "detail": "patched"},
+    )
+    assert executed.status_code == 200
+    assert client.get("/incidents/approved?execute=true").json() == []
+    again = client.post(
+        f"/incidents/{imagepull.incident_id}/execution",
+        json={"status": "proposed", "detail": "x"},
+    )
+    assert again.status_code == 409, "execution status does not go backwards"
+
+    resolved = client.post(
+        f"/incidents/{imagepull.incident_id}/resolution",
+        json={
+            "ready_within_sla": True,
+            "stayed_ready": False,
+            "resolved": False,
+            "detail": "flapped",
+        },
+    )
+    assert resolved.status_code == 200
+    stored = client.get(f"/incidents/{imagepull.incident_id}").json()
+    assert stored["execution_status"] == "executed"
+    assert stored["resolved_within_sla"] == 0
+    assert "flapped" in stored["resolution_detail"]
+    twice = client.post(
+        f"/incidents/{imagepull.incident_id}/resolution",
+        json={"ready_within_sla": True, "stayed_ready": True, "resolved": True},
+    )
+    assert twice.status_code == 409
+
+
+def test_execution_needs_an_authorising_decision(
+    api: tuple[TestClient, Services, Recording, Clock], imagepull: Contract
+) -> None:
+    client, _, _, _ = api
+    client.post("/diagnose", json=imagepull.model_dump(mode="json"))
+    client.post(
+        f"/incidents/{imagepull.incident_id}/decision",
+        json={"decision": "rejected", "reason": "wrong"},
+    )
+    denied = client.post(
+        f"/incidents/{imagepull.incident_id}/execution", json={"status": "executed"}
+    )
+    assert denied.status_code == 409
+    assert (
+        client.post("/incidents/inc-nope/execution", json={"status": "executed"}).status_code == 404
+    )

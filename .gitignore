@@ -25,3 +25,8 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Evaluation run artifacts. The catalogue and the harness are checked in;
+# what a run produced is not.
+/eval/results/
+/eval/*.log

@@ -416,3 +416,52 @@ def test_a_rate_limit_that_outlasts_the_deadline_is_discarded(
     state = pipeline.run(oomkilled)
     assert state["outcome"] == Outcome.DISCARDED.value
     assert "429" in state["discard_reason"]
+
+
+# --------------------------------------------------------------------- cost
+
+
+def test_cost_is_summed_over_retries_and_zero_at_the_gate(
+    oomkilled: Contract, crashloop: Contract, ledger: Ledger
+) -> None:
+    from coroner_brain.llm import Usage
+
+    good = _answer(
+        root_cause="The container exceeded its memory limit.",
+        confidence=0.9,
+        evidence=[
+            {
+                "source": "container",
+                "field": "container.last_terminated.reason",
+                "value": "OOMKilled",
+            }
+        ],
+    )
+    bad = _answer(evidence=[{"source": "logs", "field": "logs.nope", "value": "x"}])
+    client = ScriptedClient([bad, good], usage=Usage(prompt_tokens=5000, completion_tokens=300))
+    pipeline = DiagnosisPipeline(
+        client=client, ledger=ledger, price_input_per_m=0.15, price_output_per_m=0.60
+    )
+    pipeline.run(oomkilled)
+    row = ledger.get(oomkilled.incident_id)
+    assert row is not None
+    assert row["prompt_tokens"] == 10000, "two calls, both counted"
+    assert row["completion_tokens"] == 600
+    assert row["cost_usd"] == pytest.approx(10000 * 0.15e-6 + 600 * 0.60e-6)
+    assert row["latency_ms_total"] >= 0
+
+    # The gate makes no call: an abstention costs nothing.
+    stripped = crashloop.model_copy(deep=True)
+    stripped.logs.available = False
+    stripped.logs.empty = True
+    stripped.logs.content = ""
+    DiagnosisPipeline(
+        client=ScriptedClient([], usage=Usage(5000, 300)),
+        ledger=ledger,
+        price_input_per_m=0.15,
+        price_output_per_m=0.60,
+    ).run(stripped)
+    row = ledger.get(stripped.incident_id)
+    assert row is not None
+    assert row["prompt_tokens"] == 0
+    assert row["cost_usd"] == 0.0

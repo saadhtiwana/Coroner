@@ -35,6 +35,13 @@ MAX_VALIDATION_RETRIES = 1
 # hanging, so an evaluation run cannot stall on one incident.
 MODEL_DEADLINE_SECONDS = 180.0
 
+# Price per million tokens, in US dollars, for the default model on the
+# default provider, as published on 2026-09-06 for openai/gpt-oss-120b on
+# Groq. These are configuration, not measurement: change the model and the
+# price must change with it, or the ledger's cost column is fiction.
+DEFAULT_PRICE_INPUT_PER_M = 0.15
+DEFAULT_PRICE_OUTPUT_PER_M = 0.60
+
 # Output sink. stdout is the default and needs no configuration; Slack is
 # opt-in and is never a prerequisite for seeing the system work. Section 7.2.
 DEFAULT_SINK = "stdout"
@@ -57,6 +64,8 @@ class Settings:
     abstention_threshold: float
     max_validation_retries: int
     model_deadline_seconds: float
+    price_input_per_m: float
+    price_output_per_m: float
 
     sink: str
     public_url: str
@@ -116,6 +125,12 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ),
         model_deadline_seconds=float(
             os.environ.get("CORONER_MODEL_DEADLINE_SECONDS", MODEL_DEADLINE_SECONDS)
+        ),
+        price_input_per_m=float(
+            os.environ.get("CORONER_PRICE_INPUT_PER_M", DEFAULT_PRICE_INPUT_PER_M)
+        ),
+        price_output_per_m=float(
+            os.environ.get("CORONER_PRICE_OUTPUT_PER_M", DEFAULT_PRICE_OUTPUT_PER_M)
         ),
         sink=os.environ.get("CORONER_SINK", DEFAULT_SINK).strip().lower() or DEFAULT_SINK,
         public_url=os.environ.get("CORONER_PUBLIC_URL", DEFAULT_PUBLIC_URL).rstrip("/"),

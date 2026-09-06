@@ -28,7 +28,7 @@ from coroner_brain.contract import Contract
 from coroner_brain.diagnosis import Diagnosis, Outcome
 from coroner_brain.evidence import EvidenceClass, ceiling, classify_evidence, gate
 from coroner_brain.ledger import Ledger, LedgerEntry
-from coroner_brain.llm import LLMClient
+from coroner_brain.llm import LLMClient, Usage
 from coroner_brain.schema import strict_schema
 from coroner_brain.validate import ValidationReport, validate
 
@@ -47,6 +47,8 @@ class State(TypedDict, total=False):
     context_hash: str
     started_at: float
     discard_reason: str
+    prompt_tokens: int
+    completion_tokens: int
 
 
 def _context_hash(payload: dict[str, Any]) -> str:
@@ -95,6 +97,8 @@ class DiagnosisPipeline:
         max_retries: int = 1,
         model_deadline: float = 180.0,
         clock: Callable[[], float] = time.monotonic,
+        price_input_per_m: float = 0.0,
+        price_output_per_m: float = 0.0,
     ) -> None:
         self._client = client
         self._ledger = ledger
@@ -103,6 +107,8 @@ class DiagnosisPipeline:
         self._deadline = model_deadline
         self._clock = clock
         self._sleep: Callable[[float], None] = time.sleep
+        self._price_in = price_input_per_m
+        self._price_out = price_output_per_m
         self._schema = strict_schema(Diagnosis)
         self._graph = self._build()
 
@@ -118,6 +124,8 @@ class DiagnosisPipeline:
             "attempts": 0,
             "validation_failures": [],
             "started_at": self._clock(),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
         }
 
     def evidence_gate(self, state: State) -> State:
@@ -162,8 +170,10 @@ class DiagnosisPipeline:
                 "attempts": attempts,
                 "outcome": Outcome.DISCARDED.value,
                 "discard_reason": str(exc),
+                **self._spent(state),
             }
 
+        spent = self._spent(state)
         try:
             parsed = Diagnosis.model_validate_json(raw)
         except ValidationError as exc:
@@ -176,9 +186,30 @@ class DiagnosisPipeline:
                 "validation_failures": [
                     f"model output did not parse against the schema: {exc.error_count()} error(s)"
                 ],
+                **spent,
             }
 
-        return {"diagnosis": parsed, "attempts": attempts, "confidence_model": parsed.confidence}
+        return {
+            "diagnosis": parsed,
+            "attempts": attempts,
+            "confidence_model": parsed.confidence,
+            **spent,
+        }
+
+    def _spent(self, state: State) -> State:
+        """Tokens so far plus the client's last call, summed over retries."""
+        usage = getattr(self._client, "last_usage", None) or Usage()
+        return {
+            "prompt_tokens": state.get("prompt_tokens", 0) + usage.prompt_tokens,
+            "completion_tokens": state.get("completion_tokens", 0) + usage.completion_tokens,
+        }
+
+    def cost_usd(self, prompt_tokens: int, completion_tokens: int) -> float:
+        return round(
+            prompt_tokens * self._price_in / 1_000_000
+            + completion_tokens * self._price_out / 1_000_000,
+            6,
+        )
 
     def _call_with_deadline(self, remaining: float, *, system: str, user: str) -> str:
         """Run the model call on a thread and give up at the deadline.
@@ -361,5 +392,11 @@ class DiagnosisPipeline:
             validation_retries=max(0, state.get("attempts", 0) - 1),
             contract_json=json.dumps(state.get("payload") or {}, sort_keys=True, default=str),
             discard_reason=state.get("discard_reason", ""),
+            prompt_tokens=state.get("prompt_tokens", 0),
+            completion_tokens=state.get("completion_tokens", 0),
+            cost_usd=self.cost_usd(
+                state.get("prompt_tokens", 0), state.get("completion_tokens", 0)
+            ),
+            latency_ms_total=int((self._clock() - state.get("started_at", self._clock())) * 1000),
         )
         self._ledger.record(entry)

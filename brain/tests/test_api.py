@@ -32,6 +32,8 @@ def settings(ledger: Ledger, **overrides: object) -> Settings:
         "abstention_threshold": 0.5,
         "max_validation_retries": 1,
         "model_deadline_seconds": 180.0,
+        "price_input_per_m": 0.15,
+        "price_output_per_m": 0.60,
         "sink": "stdout",
         "public_url": "http://brain.test",
         "approval_ttl_seconds": 600,

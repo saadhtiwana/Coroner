@@ -173,6 +173,8 @@ class Services:
                 abstention_threshold=self.settings.abstention_threshold,
                 max_retries=self.settings.max_validation_retries,
                 model_deadline=self.settings.model_deadline_seconds,
+                price_input_per_m=self.settings.price_input_per_m,
+                price_output_per_m=self.settings.price_output_per_m,
             )
         return self._pipeline
 

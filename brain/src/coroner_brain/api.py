@@ -32,6 +32,7 @@ from coroner_brain.inflight import InFlightStore, build_store
 from coroner_brain.ledger import AlreadyLabelledError, Ledger, UnknownIncidentError
 from coroner_brain.llm import LLMClient, OpenAICompatibleClient
 from coroner_brain.sink import Mode, Notice, Sink, StdoutSink
+from coroner_brain.slack import SlackConfig, SlackSink
 from coroner_brain.verdict import DiagnoseResponse
 
 log = logging.getLogger("coroner.brain")
@@ -128,7 +129,26 @@ def build_sink(settings: Settings) -> Sink:
     """Pick the sink from configuration. stdout needs nothing and is the default."""
     if settings.sink == "stdout":
         return StdoutSink()
-    raise ValueError(f"unknown sink {settings.sink!r}")
+    if settings.sink == "slack":
+        missing = [
+            name
+            for name, value in (
+                ("CORONER_SLACK_BOT_TOKEN", settings.slack_bot_token),
+                ("CORONER_SLACK_CHANNEL", settings.slack_channel),
+                ("CORONER_SLACK_SIGNING_SECRET", settings.slack_signing_secret),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(f"CORONER_SINK=slack needs {', '.join(missing)}")
+        return SlackSink(
+            SlackConfig(
+                bot_token=settings.slack_bot_token,
+                channel=settings.slack_channel,
+                signing_secret=settings.slack_signing_secret,
+            )
+        )
+    raise ValueError(f"unknown sink {settings.sink!r}; expected stdout or slack")
 
 
 def build_services(settings: Settings, client: LLMClient | None = None) -> Services:

@@ -72,6 +72,12 @@ class Settings:
     approval_secret: bytes
     approval_secret_generated: bool
 
+    # Slack, opt-in. All three are required when sink is slack; none are read
+    # otherwise.
+    slack_bot_token: str
+    slack_channel: str
+    slack_signing_secret: str
+
     @property
     def has_credentials(self) -> bool:
         return bool(self.api_key)
@@ -111,6 +117,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         redis_url=os.environ.get("CORONER_REDIS_URL") or None,
         approval_secret=secret,
         approval_secret_generated=generated,
+        slack_bot_token=os.environ.get("CORONER_SLACK_BOT_TOKEN", ""),
+        slack_channel=os.environ.get("CORONER_SLACK_CHANNEL", ""),
+        slack_signing_secret=os.environ.get("CORONER_SLACK_SIGNING_SECRET", ""),
     )
 
 

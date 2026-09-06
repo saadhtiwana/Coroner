@@ -38,6 +38,9 @@ def settings(ledger: Ledger, **overrides: object) -> Settings:
         "redis_url": None,
         "approval_secret": SECRET,
         "approval_secret_generated": False,
+        "slack_bot_token": "",
+        "slack_channel": "",
+        "slack_signing_secret": "",
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -392,3 +395,20 @@ def test_diagnose_without_credentials_is_a_503(ledger: Ledger, imagepull: Contra
 
 def test_ledger_path_is_created(tmp_path: Path) -> None:
     assert Ledger(tmp_path / "nested" / "ledger.sqlite3").count() == 0
+
+
+def test_build_sink_defaults_to_stdout_and_refuses_half_configured_slack(ledger: Ledger) -> None:
+    from coroner_brain.api import build_sink
+    from coroner_brain.slack import SlackSink
+
+    assert build_sink(settings(ledger)).name == "stdout"
+    with pytest.raises(ValueError, match="CORONER_SLACK_CHANNEL"):
+        build_sink(settings(ledger, sink="slack", slack_bot_token="x", slack_signing_secret="y"))
+    with pytest.raises(ValueError, match="unknown sink"):
+        build_sink(settings(ledger, sink="pager"))
+    sink = build_sink(
+        settings(
+            ledger, sink="slack", slack_bot_token="x", slack_channel="C1", slack_signing_secret="y"
+        )
+    )
+    assert isinstance(sink, SlackSink)

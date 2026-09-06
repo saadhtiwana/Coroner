@@ -12,14 +12,17 @@ call them from its interaction handler.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Annotated, Any, Literal
+from urllib.parse import parse_qs
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from coroner_brain import CONTRACT_VERSION, __version__
@@ -31,8 +34,23 @@ from coroner_brain.graph import DiagnosisPipeline
 from coroner_brain.inflight import InFlightStore, build_store
 from coroner_brain.ledger import AlreadyLabelledError, Ledger, UnknownIncidentError
 from coroner_brain.llm import LLMClient, OpenAICompatibleClient
-from coroner_brain.sink import Mode, Notice, Sink, StdoutSink
-from coroner_brain.slack import SlackConfig, SlackSink
+from coroner_brain.sink import Mode, Notice, Sink, StdoutSink, notice_from_row
+from coroner_brain.slack import (
+    ACTION_ACTUAL_CAUSE,
+    ACTION_APPROVE,
+    ACTION_EDIT,
+    ACTION_REJECT,
+    RATING_ACTIONS,
+    VIEW_ACTUAL_CAUSE,
+    VIEW_EDIT,
+    VIEW_REJECT,
+    SlackConfig,
+    SlackSink,
+    actual_cause_view,
+    edit_view,
+    reject_view,
+    verify_signature,
+)
 from coroner_brain.verdict import DiagnoseResponse
 
 log = logging.getLogger("coroner.brain")
@@ -318,6 +336,166 @@ def incident(incident_id: str, services: ServicesDep) -> dict[str, Any]:
     if row is None:
         raise HTTPException(status_code=404, detail="no such incident")
     return row
+
+
+# ------------------------------------------------------------ slack webhook
+
+
+@app.post("/slack/interactions")
+async def slack_interactions(
+    request: Request,
+    services: ServicesDep,
+    x_slack_signature: Annotated[str, Header()] = "",
+    x_slack_request_timestamp: Annotated[str, Header()] = "",
+) -> JSONResponse:
+    """Slack's interactivity endpoint: buttons and modal submissions.
+
+    Every request is verified against the signing secret before the payload
+    is read. The decision itself goes through the same approval graph as the
+    JSON endpoint; this handler only translates Slack's shapes and updates
+    the message afterwards.
+    """
+    sink = services.sink
+    if not isinstance(sink, SlackSink):
+        raise HTTPException(status_code=404, detail="the slack sink is not configured")
+
+    body = await request.body()
+    if not verify_signature(
+        sink.config.signing_secret, x_slack_request_timestamp, body, x_slack_signature
+    ):
+        raise HTTPException(status_code=401, detail="bad slack signature")
+
+    form = parse_qs(body.decode())
+    try:
+        payload = json.loads(form.get("payload", ["{}"])[0])
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="payload is not json") from exc
+
+    kind = payload.get("type")
+    if kind == "block_actions":
+        return _slack_block_action(payload, services, sink)
+    if kind == "view_submission":
+        return _slack_view_submission(payload, services, sink)
+    return JSONResponse({})
+
+
+def _slack_block_action(
+    payload: dict[str, Any], services: Services, sink: SlackSink
+) -> JSONResponse:
+    actions = payload.get("actions") or []
+    if not actions:
+        return JSONResponse({})
+    action_id = str(actions[0].get("action_id", ""))
+    incident_id = str(actions[0].get("value", ""))
+    container = payload.get("container") or {}
+    where = {
+        "incident_id": incident_id,
+        "channel": str(container.get("channel_id", "")),
+        "ts": str(container.get("message_ts", "")),
+    }
+    trigger_id = str(payload.get("trigger_id", ""))
+    user = str(
+        (payload.get("user") or {}).get("username") or (payload.get("user") or {}).get("id") or ""
+    )
+
+    if action_id == ACTION_APPROVE:
+        try:
+            services.approvals.decide(incident_id, "approved")
+        except ApprovalError as exc:
+            _slack_note(sink, where, f"Could not approve: {exc.detail}")
+            return JSONResponse({})
+        log.info("incident %s approved via slack by %s", incident_id, user)
+        _slack_refresh(services, sink, where)
+        return JSONResponse({})
+
+    if action_id in RATING_ACTIONS:
+        try:
+            services.ledger.label(incident_id, shadow_rating=RATING_ACTIONS[action_id])
+        except (UnknownIncidentError, AlreadyLabelledError) as exc:
+            _slack_note(sink, where, f"Could not record the rating: {exc}")
+            return JSONResponse({})
+        _slack_refresh(services, sink, where)
+        return JSONResponse({})
+
+    if action_id == ACTION_REJECT:
+        sink.client.open_view(trigger_id, reject_view(where))
+        return JSONResponse({})
+    if action_id == ACTION_EDIT:
+        row = services.ledger.get(incident_id) or {}
+        sink.client.open_view(trigger_id, edit_view(where, str(row.get("proposed_action") or "")))
+        return JSONResponse({})
+    if action_id == ACTION_ACTUAL_CAUSE:
+        sink.client.open_view(trigger_id, actual_cause_view(where))
+        return JSONResponse({})
+    return JSONResponse({})
+
+
+def _slack_view_submission(
+    payload: dict[str, Any], services: Services, sink: SlackSink
+) -> JSONResponse:
+    view = payload.get("view") or {}
+    callback = str(view.get("callback_id", ""))
+    try:
+        where = json.loads(view.get("private_metadata") or "{}")
+    except json.JSONDecodeError:
+        where = {}
+    incident_id = str(where.get("incident_id", ""))
+    values = ((view.get("state") or {}).get("values") or {}).get("text") or {}
+    text = str((values.get("value") or {}).get("value") or "").strip()
+
+    def reject_with(message: str) -> JSONResponse:
+        # Slack renders this under the input without closing the modal.
+        return JSONResponse({"response_action": "errors", "errors": {"text": message}})
+
+    if not text:
+        return reject_with("This cannot be empty.")
+
+    try:
+        if callback == VIEW_REJECT:
+            services.approvals.decide(incident_id, "rejected", reason=text)
+        elif callback == VIEW_EDIT:
+            services.approvals.decide(incident_id, "edited", action=text)
+        elif callback == VIEW_ACTUAL_CAUSE:
+            services.ledger.label(incident_id, actual_cause=text)
+        else:
+            return JSONResponse({"response_action": "clear"})
+    except ApprovalError as exc:
+        return reject_with(exc.detail)
+    except (UnknownIncidentError, AlreadyLabelledError) as exc:
+        return reject_with(str(exc))
+
+    _slack_refresh(services, sink, where)
+    return JSONResponse({"response_action": "clear"})
+
+
+def _slack_refresh(services: Services, sink: SlackSink, where: dict[str, Any]) -> None:
+    """Re-render the delivered message from the ledger row as the record."""
+    incident_id = str(where.get("incident_id", ""))
+    channel, ts = str(where.get("channel", "")), str(where.get("ts", ""))
+    row = services.ledger.get(incident_id)
+    if row is None or not channel or not ts:
+        return
+    settings = services.settings
+    mode: Mode = "live" if settings.is_promoted(str(row["failure_type"])) else "shadow"
+    notice = notice_from_row(
+        row, threshold=settings.abstention_threshold, mode=mode, public_url=settings.public_url
+    )
+    if notice is None:
+        return
+    try:
+        sink.refresh(channel, ts, notice, row)
+    except Exception:  # the label is recorded; a failed redraw must not undo that
+        log.exception("could not update slack message for %s", incident_id)
+
+
+def _slack_note(sink: SlackSink, where: dict[str, Any], text: str) -> None:
+    channel = str(where.get("channel", ""))
+    if not channel:
+        return
+    try:
+        sink.client.post_message(channel, text, [])
+    except Exception:
+        log.exception("could not post slack note")
 
 
 def _label(

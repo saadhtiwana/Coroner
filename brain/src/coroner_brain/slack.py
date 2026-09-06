@@ -14,7 +14,10 @@ renders and posts.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -95,6 +98,37 @@ class SlackClient:
         """Post to an interaction's response_url, which needs no token."""
         response = self._http.post(response_url, json=body)
         response.raise_for_status()
+
+
+# ------------------------------------------------------------- verification
+
+# Slack signs each request as v0:<timestamp>:<body> with the signing secret.
+# A request older than this is refused even with a good signature, which is
+# Slack's own guidance against replay.
+MAX_REQUEST_AGE_SECONDS = 300
+
+
+def verify_signature(
+    signing_secret: str, timestamp: str, body: bytes, signature: str, now: float | None = None
+) -> bool:
+    if not signing_secret or not timestamp or not signature:
+        return False
+    try:
+        sent_at = int(timestamp)
+    except ValueError:
+        return False
+    current = time.time() if now is None else now
+    if abs(current - sent_at) > MAX_REQUEST_AGE_SECONDS:
+        return False
+    base = b"v0:" + timestamp.encode() + b":" + body
+    expected = "v0=" + hmac.new(signing_secret.encode(), base, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def sign_request(signing_secret: str, timestamp: str, body: bytes) -> str:
+    """What Slack would send. Tests use it to build valid requests."""
+    base = b"v0:" + timestamp.encode() + b":" + body
+    return "v0=" + hmac.new(signing_secret.encode(), base, hashlib.sha256).hexdigest()
 
 
 # ----------------------------------------------------------------- rendering

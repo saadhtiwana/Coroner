@@ -997,6 +997,59 @@ the sink keeping any state of its own.
 
 **Ratified as implemented.**
 
+### 6.16 confidence_model is not a measurement; calibration is against the ceiling
+
+**Decision:** the calibration metric in section 5.3 is computed against the
+deterministic ceiling, which is the evidence class, and not against the
+model's self-reported confidence. `confidence_model` stays in the ledger as
+a recorded observation and is not used to gate anything, to bucket anything,
+or to report anything as a measurement. The README must say so.
+
+The question was whether a recorded spread of 0.6, 0.7, and 0.9 on one
+contract meant the number was noise. It was measured on 2026-09-06 by running
+each of the four recorded contracts ten times at temperature 0 with the
+prompt unchanged (version 2). Nine of the forty calls were refused by the
+provider's rate limit and are excluded below; section 8 records them.
+
+| Contract | Runs | Mean | Standard deviation | Range | Ceiling | Final equal to ceiling |
+| --- | --- | --- | --- | --- | --- | --- |
+| CrashLoopBackOff, fatal log line | 8 | 0.90 | 0.000 | 0.90 to 0.90 | 0.80 | 8 of 8 |
+| ImagePullBackOff, 403 in event | 8 | 0.95 | 0.003 | 0.95 to 0.96 | 0.95 | 8 of 8 |
+| OOMKilled, 128Mi, log tail | 7 | 0.92 | 0.020 | 0.90 to 0.95 | 0.90 | 7 of 7 |
+| OOMKilled during init, 2Mi | 8 | 0.94 | 0.023 | 0.90 to 0.96 | 0.80 | 8 of 8 |
+
+The 0.6, 0.7, 0.9 sequence was not identical input under one prompt. The
+0.6 and 0.7 were prompt version 1 on two different days; the 0.9 was prompt
+version 2 after a validation retry, whose prompt tells the model to lower its
+confidence. Under one prompt the run-to-run spread is at most 0.06 and the
+standard deviation at most 0.023. The larger movement in the number comes from
+the retry path, not from sampling: on the OOMKilled contract five of seven
+successful runs needed a second attempt, and the second attempt reported 0.90
+to 0.92 where the first reported 0.93 to 0.96.
+
+What the number actually is: a value between 0.90 and 0.96 that the model
+reports for every one of the four classes, at or above every ceiling. Across
+31 successful runs `final` equalled the ceiling 31 times. The model's number
+never lowered a final confidence, so the ceiling is not the cap on the
+measurement; it is the measurement. That is the first of the two cases the
+question posed, and the answer is that `confidence_model` is decorative in
+practice.
+
+The diagnosis itself was stable. For every contract the root cause named the
+same thing in every run: the refused Postgres connection, the registry's 403
+on an anonymous token, the 128Mi limit exceeded, the 2Mi limit too low for
+init. Wording varied; the claim did not. Confidence variance and diagnosis
+variance are different problems, and the second one did not occur.
+
+Not done: taking the median of N samples. It would cost N model calls per
+incident against a provider that allows about one call a minute at this
+prompt size, to stabilise a number the ceiling overrides. Dropping the
+model's number entirely was also not done, because it costs nothing to
+record and section 5 data may one day show it carrying information below
+the ceiling; if it ever does, that will be visible in the ledger.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability
@@ -1093,17 +1146,31 @@ one in the contract. Resolved by deduplicating on the emitted contract, at the
 cost of collecting on every informer update, or by a cheaper pre-collection
 event lookup.
 
-**Model latency is not bounded.** One image pull call on 2026-09-06 took 999
-seconds of wall clock including client retries, against a 90 second per-request
-timeout. Groq's free tier rate limits, and the OpenAI client retries on 429
-with backoff. Section 6.7 said the section 5 evaluation must tolerate
-interruption; this is the measurement behind that sentence. Resolved by the
-harness recording per-call latency and treating a truncated run as discarded.
+**Model latency was not bounded; now it is, and the limit is known.** One
+image pull call on 2026-09-06 took 999 seconds of wall clock including client
+retries, against a 90 second per-request timeout. The pipeline now carries a
+180 second deadline over the whole diagnose-and-validate loop and records a
+call that misses it as `DISCARDED`, a third terminal outcome that is neither a
+diagnosis nor an abstention, excluded from accuracy and counted. The cause is
+also now measured: the provider's on-demand tier allows 8000 tokens per
+minute, and one contract prompt is about 5000 tokens, so the sustainable rate
+is one diagnosis a minute. In the section 6.16 run nine of forty calls were
+refused with 429 once the ten-run loop outpaced that. Retry-after is honoured
+inside the deadline. Resolved for the section 5 harness by pacing at the
+provider's rate and re-running discarded incidents after the window; a run
+that is cut short is discarded, not averaged.
 
-**Temperature 0 is not reproducible across runs.** The same recorded image
-pull contract scored 0.6, 0.7, and 0.9 on three runs, the last under a changed
-prompt but the first two under the same one. Section 4.2 control 7 already says
-temperature does not reduce hallucination; it also does not deliver
-determinism on this provider. The ledger records `model_id` and
-`prompt_version` per row, so the variance is measurable. Resolved by reporting
-it, not by pretending it is zero.
+**Validation retries are not recorded in detail.** Five of seven successful
+OOMKilled runs in 6.16 needed a second attempt, and the ledger keeps only the
+retry count and the final failure list, which is empty on success. Why the
+first attempt failed is not known. Resolved by keeping the first attempt's
+failures in the ledger row; the harness needs them for the parse-failure rate
+in section 6.7 anyway.
+
+**Temperature 0 is not reproducible across runs, and the number it produces
+is not a measurement.** Measured in section 6.16: standard deviation at most
+0.023 under one prompt, and the model's number never fell below a ceiling in
+31 runs. Section 4.2 control 7 already says temperature does not reduce
+hallucination; it also does not deliver determinism on this provider. The
+ledger records `model_id` and `prompt_version` per row, so the variance stays
+measurable. Resolved by 6.16: calibration is measured against the ceiling.

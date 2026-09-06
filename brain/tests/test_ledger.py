@@ -69,3 +69,112 @@ def test_survives_reopening(tmp_path_factory: object, ledger: Ledger) -> None:
     reopened = Ledger(ledger.path)
     assert reopened.count() == 1
     assert reopened.get("inc-1") is not None
+
+
+def test_labels_are_written_once(ledger: Ledger) -> None:
+    """Section 5.4: no record is mutated after its label is written."""
+    import pytest
+
+    from coroner_brain.ledger import AlreadyLabelledError, UnknownIncidentError
+
+    ledger.record(_entry())
+    ledger.label("inc-1", decision="rejected", decision_reason="wrong service")
+    with pytest.raises(AlreadyLabelledError):
+        ledger.label("inc-1", decision="approved")
+    row = ledger.get("inc-1")
+    assert row is not None
+    assert row["decision"] == "rejected"
+
+    ledger.label("inc-1", shadow_rating="unsure")
+    with pytest.raises(AlreadyLabelledError):
+        ledger.label("inc-1", shadow_rating="would_approve")
+
+    with pytest.raises(UnknownIncidentError):
+        ledger.label("inc-does-not-exist", decision="approved")
+
+
+def test_edit_records_the_corrected_action_and_the_token(ledger: Ledger) -> None:
+    ledger.record(_entry(proposed_action="raise the limit to 64Mi"))
+    ledger.label(
+        "inc-1",
+        decision="edited",
+        decision_action="raise the limit to 256Mi",
+        approval_token="tok",
+    )
+    row = ledger.get("inc-1")
+    assert row is not None
+    assert row["decision"] == "edited"
+    assert row["decision_action"] == "raise the limit to 256Mi"
+    assert row["proposed_action"] == "raise the limit to 64Mi", "the proposal is kept as proposed"
+    assert row["approval_token"] == "tok"
+
+
+def test_a_version_one_ledger_is_migrated_in_place(tmp_path: object) -> None:
+    """A file written before the decision columns existed keeps its rows."""
+    import sqlite3
+    from pathlib import Path
+
+    from coroner_brain.ledger import SCHEMA_VERSION
+
+    assert isinstance(tmp_path, Path)
+    path = tmp_path / "old.sqlite3"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE schema_meta (version INTEGER NOT NULL);
+        INSERT INTO schema_meta (version) VALUES (1);
+        CREATE TABLE diagnoses (
+            incident_id TEXT PRIMARY KEY, recorded_at TEXT NOT NULL,
+            failure_type TEXT NOT NULL, contract_version TEXT NOT NULL,
+            context_hash TEXT NOT NULL, evidence_class TEXT NOT NULL,
+            model_id TEXT NOT NULL, prompt_version TEXT NOT NULL, outcome TEXT NOT NULL,
+            abstained INTEGER NOT NULL, abstain_reason TEXT NOT NULL DEFAULT '',
+            root_cause TEXT NOT NULL DEFAULT '', explanation TEXT NOT NULL DEFAULT '',
+            proposed_action TEXT NOT NULL DEFAULT '',
+            competing_hypothesis TEXT NOT NULL DEFAULT '',
+            evidence_json TEXT NOT NULL DEFAULT '[]', confidence_model REAL,
+            confidence_final REAL, validation_failures TEXT NOT NULL DEFAULT '[]',
+            validation_retries INTEGER NOT NULL DEFAULT 0,
+            decision TEXT, decision_at TEXT, decision_reason TEXT, shadow_rating TEXT,
+            actual_cause TEXT, resolved_within_sla INTEGER
+        );
+        INSERT INTO diagnoses (incident_id, recorded_at, failure_type, contract_version,
+            context_hash, evidence_class, model_id, prompt_version, outcome, abstained)
+        VALUES ('inc-old', 't', 'OOMKilled', '1', 'h', 'oom_with_limits', 'm', '1', 'DIAGNOSED', 0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    ledger = Ledger(path)
+    assert ledger.schema_version() == SCHEMA_VERSION
+    row = ledger.get("inc-old")
+    assert row is not None
+    assert row["decision_action"] is None
+    ledger.label("inc-old", decision="approved", approval_token="tok")
+    row = ledger.get("inc-old")
+    assert row is not None
+    assert row["approval_token"] == "tok"
+    # Reopening does not re-run the migration or fail on existing columns.
+    assert Ledger(path).schema_version() == SCHEMA_VERSION
+
+
+def test_the_row_holds_the_contract_it_was_diagnosed_from(
+    imagepull: object, ledger: Ledger
+) -> None:
+    """Section 5.3: a real outcome paired with the exact evidence held at the time."""
+    import json
+
+    from coroner_brain.contract import Contract
+    from coroner_brain.graph import DiagnosisPipeline
+    from coroner_brain.llm import ScriptedClient
+
+    assert isinstance(imagepull, Contract)
+    DiagnosisPipeline(client=ScriptedClient([]), ledger=ledger).run(
+        imagepull.model_copy(update={"failure_type": "CrashLoopBackOff"})
+    )
+    row = ledger.get(imagepull.incident_id)
+    assert row is not None
+    stored = json.loads(row["contract_json"])
+    assert stored["incident_id"] == imagepull.incident_id
+    assert stored["container"]["image"] == imagepull.container.image

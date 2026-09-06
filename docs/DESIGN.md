@@ -930,6 +930,73 @@ accepts a value the contract does not hold: the null owner is compared against
 
 **Ratified as implemented.**
 
+### 6.13 The brain owns the sinks and resumes by state, not by checkpoint
+
+**Decision:** output sinks, the approval endpoints, the in-flight store, and
+the expiry sweeper live in the brain. The agent posts a contract, logs the
+verdict, and renders nothing. Resumption after a decision is done by loading
+the parked state from the store and running a second graph, not by a
+LangGraph checkpointer.
+
+Section 7.2 says the approval gate is a property of the agent, which holds
+the credentials, and not of the transport. That is preserved: the agent will
+not execute an action whose token it cannot verify, and the token is minted
+only by the decision path. What the agent does not do is talk to Slack or
+listen for webhooks. It holds cluster credentials, and the process that holds
+cluster credentials should not also be the process reachable from the
+internet. The brain holds no cluster credentials and is the natural place for
+an inbound webhook.
+
+Resumption by state rather than checkpoint: the parked state is a few hundred
+bytes of JSON that the ledger already understands, and a checkpoint would be
+an opaque blob beside it. The Redis checkpointer for LangGraph also depends
+on Redis modules that `redis:alpine` does not ship, and the demo runs on
+`redis:alpine`. The second graph has three nodes, load, check, record, and
+every refusal, unknown incident, already decided, window expired, missing
+reason, missing edit, is a state the graph reaches rather than an exception
+thrown around it.
+
+Without a Redis URL the in-flight store is process memory. That is enough to
+run on a laptop with one environment variable, which section 7 requires, and
+it is logged at startup as the limitation it is.
+
+**Ratified as implemented.**
+
+### 6.14 Every failure type starts in shadow mode
+
+**Decision:** `CORONER_PROMOTED_TYPES` is empty by default, so no verdict
+offers approval until a type is promoted by hand. In shadow mode the message
+asks "would you have approved this" and offers nothing to approve.
+
+Section 5.5 says a type stays in shadow until it clears its section 2.4
+prediction over 20 incidents, and no type has any incidents yet. A default
+that offered approval before the first measurement would make the promotion
+rule decorative. The cost is that a stranger running the demo sees ratings
+rather than approve buttons unless they promote a type, and the demo will
+promote ImagePullBackOff explicitly and say so, since that is the class whose
+correctness is externally verifiable per section 2.5.
+
+**Ratified as implemented.**
+
+### 6.15 The ledger row carries the contract
+
+**Decision:** schema 3 stores the evidence contract, as diagnosed, on every
+ledger row.
+
+Section 5.3 describes the ledger as a corpus of real outcomes paired with the
+exact evidence available at the time, and says that corpus is the only honest
+way to score a proposed change to the context contract offline. Until schema
+3 the row held the verdict and its citations but not the evidence, so the
+corpus described in 5.3 did not exist. It does now. The cost is a few
+kilobytes per row, mostly log tail, in a file that section 5.4 already says
+is small and single-writer.
+
+The same column is what lets the Slack message be redrawn after a decision
+from the row alone, with observed facts intact and buttons removed, without
+the sink keeping any state of its own.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability

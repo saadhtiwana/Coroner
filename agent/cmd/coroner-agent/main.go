@@ -1,10 +1,12 @@
-// Command coroner-agent watches a Kubernetes cluster for failing workloads and
-// emits the assembled evidence contract as JSON.
+// Command coroner-agent watches a Kubernetes cluster for failing workloads,
+// assembles the evidence contract for each, and hands it to the brain.
 //
-// This milestone stops at emission. There is no brain, no model, no Slack, and
-// no HTTP client of any kind: the agent reads the cluster and writes JSON to
-// stdout. Everything a diagnosis will later rest on is produced here, so it is
-// worth being able to read it directly before anything consumes it.
+// With no brain configured the agent writes each contract as JSON to stdout,
+// which is how the contract was developed and is still the way to read exactly
+// what a diagnosis will rest on. With --brain-url set, each contract is posted
+// to the brain and the verdict is logged; the brain's own output sink is then
+// what a human sees. The agent never holds a model credential and the brain
+// never holds a cluster credential.
 package main
 
 import (
@@ -25,6 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/saadhtiwana/coroner/agent/internal/brain"
 	"github.com/saadhtiwana/coroner/agent/internal/classify"
 	"github.com/saadhtiwana/coroner/agent/internal/collect"
 	"github.com/saadhtiwana/coroner/agent/internal/contract"
@@ -34,13 +37,16 @@ import (
 var version = "dev"
 
 type options struct {
-	kubeconfig  string
-	namespace   string
-	once        bool
-	compact     bool
-	logLevel    string
-	resync      time.Duration
-	showVersion bool
+	kubeconfig   string
+	namespace    string
+	once         bool
+	compact      bool
+	logLevel     string
+	resync       time.Duration
+	showVersion  bool
+	brainURL     string
+	brainTimeout time.Duration
+	emit         bool
 }
 
 func main() {
@@ -68,6 +74,9 @@ func parseFlags() options {
 	flag.StringVar(&o.logLevel, "log-level", "info", "one of debug, info, warn, error")
 	flag.DurationVar(&o.resync, "resync", 10*time.Minute, "informer resync period in watch mode")
 	flag.BoolVar(&o.showVersion, "version", false, "print version and exit")
+	flag.StringVar(&o.brainURL, "brain-url", os.Getenv("CORONER_BRAIN_URL"), "base URL of the brain; empty means write contracts to stdout instead (env CORONER_BRAIN_URL)")
+	flag.DurationVar(&o.brainTimeout, "brain-timeout", brain.DefaultTimeout, "timeout for one diagnosis round trip")
+	flag.BoolVar(&o.emit, "emit", false, "also write each contract to stdout when a brain is configured")
 	flag.Parse()
 	return o
 }
@@ -79,27 +88,113 @@ func run(opts options, logger *slog.Logger) error {
 	}
 
 	collector := collect.New(client, collect.ClientLogFetcher{Client: client})
-	emitter := newEmitter(os.Stdout, opts.compact)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	handler, err := newHandler(ctx, opts, logger)
+	if err != nil {
+		return err
+	}
 
 	logger.Info("coroner-agent starting",
 		"version", version,
 		"contract_version", contract.Version,
 		"namespace", displayNamespace(opts.namespace),
 		"mode", modeName(opts.once),
+		"output", handler.name(),
 	)
 
 	if opts.once {
-		return scanOnce(ctx, client, collector, emitter, opts.namespace, logger)
+		return scanOnce(ctx, client, collector, handler, opts.namespace, logger)
 	}
-	return watch(ctx, client, collector, emitter, opts, logger)
+	return watch(ctx, client, collector, handler, opts, logger)
+}
+
+// handler receives each assembled contract.
+type handler interface {
+	handle(ctx context.Context, c *contract.Contract) error
+	name() string
+}
+
+// newHandler picks the destination. stdout is the default and needs nothing;
+// the brain is opt-in and is checked at startup so a wrong URL or a brain
+// without credentials fails before the first incident, not on it.
+func newHandler(ctx context.Context, opts options, logger *slog.Logger) (handler, error) {
+	emitter := newEmitter(os.Stdout, opts.compact)
+	if opts.brainURL == "" {
+		return emitter, nil
+	}
+
+	client, err := brain.New(opts.brainURL, opts.brainTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("configuring brain client: %w", err)
+	}
+	health, err := client.Health(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("brain is not reachable: %w", err)
+	}
+	if health.ContractVersion != contract.Version {
+		return nil, fmt.Errorf("brain speaks contract version %q, this agent emits %q", health.ContractVersion, contract.Version)
+	}
+	if !health.CredentialsPresent {
+		logger.Warn("brain reports no model credential; every contract will be refused", "brain", opts.brainURL)
+	}
+	logger.Info("brain reachable", "brain", opts.brainURL, "brain_version", health.Version, "model", health.Model)
+
+	h := &brainHandler{client: client, logger: logger}
+	if opts.emit {
+		h.also = emitter
+	}
+	return h, nil
+}
+
+// brainHandler posts the contract and logs the verdict. The verdict's text is
+// not printed here: the brain's sink renders it with observed and inferred
+// facts kept apart, and printing it a second time from the agent would be a
+// second rendering to keep consistent.
+type brainHandler struct {
+	client *brain.Client
+	logger *slog.Logger
+	also   *emitter
+}
+
+func (h *brainHandler) name() string { return "brain" }
+
+func (h *brainHandler) handle(ctx context.Context, c *contract.Contract) error {
+	if h.also != nil {
+		if err := h.also.emit(c); err != nil {
+			return fmt.Errorf("emitting contract %s: %w", c.IncidentID, err)
+		}
+	}
+	v, err := h.client.Diagnose(ctx, c)
+	if err != nil {
+		return fmt.Errorf("diagnosing %s: %w", c.IncidentID, err)
+	}
+	attrs := []any{
+		"incident_id", v.IncidentID,
+		"outcome", v.Outcome,
+		"evidence_class", v.EvidenceClass,
+		"approvable", v.Approvable,
+	}
+	if v.ConfidenceFinal != nil {
+		attrs = append(attrs, "confidence_final", *v.ConfidenceFinal)
+	}
+	if v.ConfidenceCeiling != nil {
+		attrs = append(attrs, "confidence_ceiling", *v.ConfidenceCeiling)
+	}
+	if v.Abstained {
+		attrs = append(attrs, "abstain_reason", v.AbstainReason)
+	} else {
+		attrs = append(attrs, "root_cause", v.RootCause)
+	}
+	h.logger.Info("verdict received", attrs...)
+	return nil
 }
 
 // scanOnce inspects the pods that exist right now. Used to verify emission
 // against a cluster whose failures were induced deliberately.
-func scanOnce(ctx context.Context, client kubernetes.Interface, collector *collect.Collector, e *emitter, namespace string, logger *slog.Logger) error {
+func scanOnce(ctx context.Context, client kubernetes.Interface, collector *collect.Collector, h handler, namespace string, logger *slog.Logger) error {
 	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing pods in %s: %w", displayNamespace(namespace), err)
@@ -112,8 +207,8 @@ func scanOnce(ctx context.Context, client kubernetes.Interface, collector *colle
 		if result.Type == classify.None {
 			continue
 		}
-		if err := emitOne(ctx, collector, e, pod, container, result, logger); err != nil {
-			logger.Error("collection failed", "pod", pod.Namespace+"/"+pod.Name, "error", err)
+		if err := emitOne(ctx, collector, h, pod, container, result, logger); err != nil {
+			logger.Error("incident not delivered", "pod", pod.Namespace+"/"+pod.Name, "error", err)
 			continue
 		}
 		emitted++
@@ -128,7 +223,7 @@ func scanOnce(ctx context.Context, client kubernetes.Interface, collector *colle
 // Deduplication is by incident id, which is derived from pod uid, container,
 // restart count and failure type. A pod that restarts again is a new
 // occurrence and is emitted again; the same occurrence observed twice is not.
-func watch(ctx context.Context, client kubernetes.Interface, collector *collect.Collector, e *emitter, opts options, logger *slog.Logger) error {
+func watch(ctx context.Context, client kubernetes.Interface, collector *collect.Collector, h handler, opts options, logger *slog.Logger) error {
 	factory := informers.NewSharedInformerFactoryWithOptions(client, opts.resync, informers.WithNamespace(opts.namespace))
 	podInformer := factory.Core().V1().Pods().Informer()
 
@@ -147,8 +242,8 @@ func watch(ctx context.Context, client kubernetes.Interface, collector *collect.
 		if !seen.markNew(id) {
 			return
 		}
-		if err := emitOne(ctx, collector, e, pod, container, result, logger); err != nil {
-			logger.Error("collection failed", "pod", pod.Namespace+"/"+pod.Name, "error", err)
+		if err := emitOne(ctx, collector, h, pod, container, result, logger); err != nil {
+			logger.Error("incident not delivered", "pod", pod.Namespace+"/"+pod.Name, "error", err)
 		}
 	}
 
@@ -172,7 +267,7 @@ func watch(ctx context.Context, client kubernetes.Interface, collector *collect.
 	return nil
 }
 
-func emitOne(ctx context.Context, collector *collect.Collector, e *emitter, pod *corev1.Pod, container string, result classify.Result, logger *slog.Logger) error {
+func emitOne(ctx context.Context, collector *collect.Collector, h handler, pod *corev1.Pod, container string, result classify.Result, logger *slog.Logger) error {
 	c, err := collector.Collect(ctx, pod, container, result)
 	if err != nil {
 		return fmt.Errorf("collecting contract for %s/%s container %s: %w", pod.Namespace, pod.Name, container, err)
@@ -185,7 +280,7 @@ func emitOne(ctx context.Context, collector *collect.Collector, e *emitter, pod 
 		"incident_id", c.IncidentID,
 		"logs_available", c.Logs.Available,
 	)
-	return e.emit(c)
+	return h.handle(ctx, c)
 }
 
 func restartCount(pod *corev1.Pod, container string) int32 {
@@ -217,6 +312,10 @@ func newEmitter(w *os.File, compact bool) *emitter {
 	}
 	return &emitter{enc: enc}
 }
+
+func (e *emitter) name() string { return "stdout" }
+
+func (e *emitter) handle(_ context.Context, c *contract.Contract) error { return e.emit(c) }
 
 func (e *emitter) emit(c *contract.Contract) error {
 	e.mu.Lock()

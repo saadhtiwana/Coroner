@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -57,6 +58,31 @@ class ModelUnavailableError(RuntimeError):
     """The model did not answer in time, or the call failed."""
 
 
+# The provider's 429 body says how long to wait, for example "Please try
+# again in 2.219999999s" or "in 1m3.5s". Measured 2026-09-06: the on-demand
+# tier allows 8000 tokens a minute and one contract prompt is about 5000, so
+# a second call inside the same minute is refused with a wait of seconds.
+_RETRY_AFTER = re.compile(
+    r"(?:try again in|retry[- ]after)\s+(?:(\d+)m)?(\d+(?:\.\d+)?)\s*s", re.IGNORECASE
+)
+
+# Never wait on a retry-after longer than this even if the deadline allows,
+# so a provider asking for minutes does not hold a diagnosis hostage.
+MAX_RETRY_AFTER = 90.0
+
+
+def retry_after_seconds(error: BaseException) -> float | None:
+    """Seconds the provider asked us to wait, from a rate limit error, or None."""
+    text = str(error)
+    if "rate limit" not in text.lower() and "429" not in text:
+        return None
+    match = _RETRY_AFTER.search(text)
+    if match is None:
+        return 5.0
+    minutes = int(match.group(1) or 0)
+    return minutes * 60 + float(match.group(2))
+
+
 class DiagnosisPipeline:
     """Builds and runs the graph."""
 
@@ -76,6 +102,7 @@ class DiagnosisPipeline:
         self._max_retries = max_retries
         self._deadline = model_deadline
         self._clock = clock
+        self._sleep: Callable[[float], None] = time.sleep
         self._schema = strict_schema(Diagnosis)
         self._graph = self._build()
 
@@ -176,18 +203,41 @@ class DiagnosisPipeline:
             except BaseException as exc:  # reported to the caller, not swallowed
                 result.put((None, exc))
 
-        threading.Thread(target=run, name="coroner-model-call", daemon=True).start()
-        try:
-            raw, error = result.get(timeout=remaining)
-        except queue.Empty:
-            raise ModelUnavailableError(
-                f"the model did not answer within the {self._deadline:.0f}s deadline"
-            ) from None
-        if error is not None:
-            raise ModelUnavailableError(
-                f"the model call failed: {type(error).__name__}: {error}"
-            ) from error
-        return raw or ""
+        started = self._clock()
+        waited_for_limit = 0.0
+        while True:
+            budget = remaining - (self._clock() - started)
+            if budget <= 0:
+                raise ModelUnavailableError(
+                    f"the model did not answer within the {self._deadline:.0f}s deadline"
+                    + (
+                        f" after waiting {waited_for_limit:.0f}s on rate limits"
+                        if waited_for_limit
+                        else ""
+                    )
+                )
+            threading.Thread(target=run, name="coroner-model-call", daemon=True).start()
+            try:
+                raw, error = result.get(timeout=budget)
+            except queue.Empty:
+                raise ModelUnavailableError(
+                    f"the model did not answer within the {self._deadline:.0f}s deadline"
+                ) from None
+            if error is None:
+                return raw or ""
+
+            # A rate limit with a short wait is not a failure; it is the
+            # provider pacing us. Wait as asked, inside the deadline, and go
+            # again. Anything else, or a wait that would blow the deadline,
+            # is recorded as the discard it is.
+            wait = retry_after_seconds(error)
+            budget = remaining - (self._clock() - started)
+            if wait is None or wait > MAX_RETRY_AFTER or wait + 1.0 > budget:
+                raise ModelUnavailableError(
+                    f"the model call failed: {type(error).__name__}: {error}"
+                ) from error
+            waited_for_limit += wait + 0.5
+            self._sleep(wait + 0.5)
 
     def discarded(self, state: State) -> State:
         return {"outcome": Outcome.DISCARDED.value}

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from coroner_brain.contract import Contract
 from coroner_brain.diagnosis import Outcome
 from coroner_brain.evidence import EvidenceClass, ceiling
@@ -260,7 +262,7 @@ class FailingClient:
     model_id = "failing"
 
     def complete_json(self, **_: object) -> str:
-        raise ConnectionError("rate limited: retry after 600s")
+        raise ConnectionError("connection reset by peer")
 
 
 def test_a_hung_model_call_is_discarded_at_the_deadline(
@@ -296,7 +298,7 @@ def test_a_failing_model_call_is_discarded_with_the_error(
     state = DiagnosisPipeline(client=FailingClient(), ledger=ledger).run(oomkilled)
     assert state["outcome"] == Outcome.DISCARDED.value
     assert "ConnectionError" in state["discard_reason"]
-    assert "rate limited" in state["discard_reason"]
+    assert "connection reset" in state["discard_reason"]
 
 
 def test_the_deadline_covers_the_retry(oomkilled: Contract, ledger: Ledger) -> None:
@@ -352,3 +354,65 @@ def test_discarded_is_neither_approvable_nor_ratable(imagepull: Contract, ledger
     with pytest.raises(NotRatableError):
         ledger.label(imagepull.incident_id, shadow_rating="unsure")
     ledger.label(imagepull.incident_id, actual_cause="the tag was wrong")
+
+
+def test_a_rate_limit_with_a_short_wait_is_retried_inside_the_deadline(
+    oomkilled: Contract, ledger: Ledger
+) -> None:
+    """Measured live: 8000 tokens a minute, a 5000 token prompt, 429 with "try again in 2.2s"."""
+    from coroner_brain.graph import retry_after_seconds
+
+    class RateLimited:
+        model_id = "limited"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete_json(self, **_: object) -> str:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError(
+                    "Error code: 429 - rate limit reached ... Please try again in 2.219999999s"
+                )
+            return _answer(
+                root_cause="The container exceeded its memory limit.",
+                confidence=0.9,
+                evidence=[
+                    {
+                        "source": "container",
+                        "field": "container.last_terminated.reason",
+                        "value": "OOMKilled",
+                    }
+                ],
+            )
+
+    client = RateLimited()
+    slept: list[float] = []
+    pipeline = DiagnosisPipeline(client=client, ledger=ledger, model_deadline=30.0)
+    pipeline._sleep = slept.append
+    state = pipeline.run(oomkilled)
+
+    assert state["outcome"] == Outcome.DIAGNOSED.value
+    assert client.calls == 2
+    assert slept == [pytest.approx(2.72, abs=0.01)]
+
+    assert retry_after_seconds(RuntimeError("429 ... try again in 1m3.5s")) == 63.5
+    assert retry_after_seconds(RuntimeError("rate limited: retry after 600s")) == 600.0
+    assert retry_after_seconds(RuntimeError("429 rate limit")) == 5.0
+    assert retry_after_seconds(RuntimeError("connection reset")) is None
+
+
+def test_a_rate_limit_that_outlasts_the_deadline_is_discarded(
+    oomkilled: Contract, ledger: Ledger
+) -> None:
+    class AlwaysLimited:
+        model_id = "limited"
+
+        def complete_json(self, **_: object) -> str:
+            raise RuntimeError("Error code: 429 - rate limit ... Please try again in 2m0s")
+
+    pipeline = DiagnosisPipeline(client=AlwaysLimited(), ledger=ledger, model_deadline=30.0)
+    pipeline._sleep = lambda _: None
+    state = pipeline.run(oomkilled)
+    assert state["outcome"] == Outcome.DISCARDED.value
+    assert "429" in state["discard_reason"]

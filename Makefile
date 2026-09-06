@@ -68,6 +68,10 @@ brain-typecheck: ## Run mypy in strict mode
 brain-test: ## Run pytest
 	cd $(BRAIN_DIR) && $(UV) run --group dev pytest -q
 
+.PHONY: brain-run
+brain-run: ## Serve the brain on :8000 with the stdout sink
+	cd $(BRAIN_DIR) && $(UV) run uvicorn coroner_brain.api:app --host 127.0.0.1 --port 8000
+
 # --------------------------------------------------------------------- cluster
 
 .PHONY: cluster-up

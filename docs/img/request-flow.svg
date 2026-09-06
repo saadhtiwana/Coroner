@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="880" height="420" role="img" aria-label="Request flow. A failing pod is collected into an evidence contract, then classified into one of four failure shapes from its termination detail rather than its surface waiting reason. A deterministic evidence gate runs before any model call and routes an incident with no causal signal straight to insufficient context, spending nothing. Otherwise the model produces a diagnosis, and a validator checks every citation against the contract that was actually sent; a diagnosis that fails is retried once and then abstains. A verified diagnosis has its confidence capped by the evidence class, and only a promoted failure type at or above the threshold offers approval. Below it, in shadow mode, and on abstention, there is no approve affordance at all.">
+  <title>How one incident moves through Coroner</title>
+  <style>
+    .canvas { fill: #fbfbfa; }
+    .box { fill: #ffffff; stroke: #d5d5d2; stroke-width: 1; }
+    .term { fill: #f4f4f2; stroke: #d5d5d2; stroke-width: 1; }
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #1b1b1b; }
+    .h { font-size: 12.5px; font-weight: 600; }
+    .s { font-size: 11px; fill: #5f6368; }
+    .lbl { font-size: 10.5px; fill: #7a7a75; }
+    .line { stroke: #9a9a94; stroke-width: 1.2; fill: none; }
+    .accent { stroke: #b23b3b; stroke-width: 1.3; fill: none; }
+    .accent-t { fill: #b23b3b; font-size: 10.5px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; fill: #5f6368; }
+  </style>
+  <rect class="canvas" x="0" y="0" width="880" height="420"/>
+
+  <text class="t s" x="24" y="34">One incident, start to finish. Nothing below the line reaches a human.</text>
+
+  <rect class="box" x="24" y="60" width="118" height="64" rx="4"/>
+  <text class="t h" x="38" y="84">collect</text>
+  <text class="t s" x="38" y="101">at detection time</text>
+  <text class="t mono" x="38" y="116">logs are racy</text>
+
+  <rect class="box" x="166" y="60" width="118" height="64" rx="4"/>
+  <text class="t h" x="180" y="84">classify</text>
+  <text class="t s" x="180" y="101">termination detail,</text>
+  <text class="t s" x="180" y="116">not the symptom</text>
+
+  <rect class="box" x="308" y="60" width="132" height="64" rx="4"/>
+  <text class="t h" x="322" y="84">evidence gate</text>
+  <text class="t s" x="322" y="101">deterministic,</text>
+  <text class="t s" x="322" y="116">before any model call</text>
+
+  <rect class="box" x="464" y="60" width="118" height="64" rx="4"/>
+  <text class="t h" x="478" y="84">diagnose</text>
+  <text class="t s" x="478" y="101">one model call,</text>
+  <text class="t s" x="478" y="116">structured output</text>
+
+  <rect class="box" x="606" y="60" width="118" height="64" rx="4"/>
+  <text class="t h" x="620" y="84">validate</text>
+  <text class="t s" x="620" y="101">every citation,</text>
+  <text class="t s" x="620" y="116">checked in code</text>
+
+  <rect class="box" x="748" y="60" width="108" height="64" rx="4"/>
+  <text class="t h" x="762" y="84">deliver</text>
+  <text class="t s" x="762" y="101">observed and</text>
+  <text class="t s" x="762" y="116">inferred, apart</text>
+
+  <path class="line" d="M142 92 L166 92" marker-end="url(#a)"/>
+  <path class="line" d="M284 92 L308 92" marker-end="url(#a)"/>
+  <path class="line" d="M440 92 L464 92" marker-end="url(#a)"/>
+  <path class="line" d="M582 92 L606 92" marker-end="url(#a)"/>
+  <path class="line" d="M724 92 L748 92" marker-end="url(#a)"/>
+
+  <path class="accent" d="M374 124 L374 196" marker-end="url(#b)"/>
+  <text class="t accent-t" x="384" y="150">no causal signal:</text>
+  <text class="t accent-t" x="384" y="164">no call is made</text>
+
+  <path class="accent" d="M665 124 L665 168 L430 168 L430 196" marker-end="url(#b)"/>
+  <text class="t accent-t" x="474" y="163">citation does not verify: retry once, then abstain</text>
+
+  <path class="line" d="M525 124 L525 148 L560 148" marker-end="url(#a)"/>
+  <text class="t lbl" x="566" y="152">malformed JSON or no answer in time</text>
+
+  <rect class="term" x="286" y="196" width="200" height="52" rx="4"/>
+  <text class="t h" x="300" y="220">INSUFFICIENT_CONTEXT</text>
+  <text class="t s" x="300" y="238">a success, and reported as one</text>
+
+  <rect class="term" x="510" y="196" width="150" height="52" rx="4"/>
+  <text class="t h" x="524" y="220">DISCARDED</text>
+  <text class="t s" x="524" y="238">nothing was reasoned</text>
+
+  <line x1="24" y1="272" x2="856" y2="272" stroke="#dededa" stroke-width="1"/>
+  <text class="t s" x="24" y="296">What a human is offered, and only here:</text>
+
+  <rect class="box" x="24" y="312" width="264" height="86" rx="4"/>
+  <text class="t h" x="38" y="334">approve, reject, or edit</text>
+  <text class="t s" x="38" y="352">promoted failure type, and</text>
+  <text class="t s" x="38" y="368">confidence at or above 0.50</text>
+  <text class="t mono" x="38" y="388">rejecting asks for one line on what is wrong</text>
+
+  <rect class="box" x="308" y="312" width="264" height="86" rx="4"/>
+  <text class="t h" x="322" y="334">rate, and nothing else</text>
+  <text class="t s" x="322" y="352">shadow mode, which is every type</text>
+  <text class="t s" x="322" y="368">until it has cleared its prediction</text>
+  <text class="t mono" x="322" y="388">a label without granting the action</text>
+
+  <rect class="box" x="592" y="312" width="264" height="86" rx="4"/>
+  <text class="t h" x="606" y="334">no affordance at all</text>
+  <text class="t s" x="606" y="352">below the threshold, or abstained,</text>
+  <text class="t s" x="606" y="368">or discarded</text>
+  <text class="t mono" x="606" y="388">absent, not greyed out</text>
+
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#9a9a94"/>
+    </marker>
+    <marker id="b" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#b23b3b"/>
+    </marker>
+  </defs>
+</svg>

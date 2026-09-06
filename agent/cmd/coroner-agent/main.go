@@ -167,8 +167,13 @@ func newRunner(client kubernetes.Interface, h handler, opts options, logger *slo
 		Logger:   logger,
 		Known:    bh.known,
 	}
-	runner.Tracking = func(ctx context.Context, incidentID string, t remediate.Target) {
-		go runner.Track(ctx, incidentID, t)
+	if opts.once {
+		// A single pass must see its own consequences before it exits.
+		runner.Tracking = runner.Track
+	} else {
+		runner.Tracking = func(ctx context.Context, incidentID string, t remediate.Target) {
+			go runner.Track(ctx, incidentID, t)
+		}
 	}
 	bh.remember = runner.Remember
 	return runner

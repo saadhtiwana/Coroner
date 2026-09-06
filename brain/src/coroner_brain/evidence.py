@@ -41,6 +41,18 @@ FATAL_MARKERS: tuple[str, ...] = (
 )
 
 
+# Substrings by which the container runtime names a memory kill in free text.
+# Mirrors the agent's oomMarkers: the two must agree or the agent will classify
+# an init OOM the brain then cannot find evidence for.
+OOM_MARKERS: tuple[str, ...] = (
+    "oom-killed",
+    "oom killed",
+    "oomkilled",
+    "out of memory",
+    "cannot allocate memory",
+)
+
+
 class EvidenceClass(StrEnum):
     """What the collected evidence can support, independent of the model."""
 
@@ -48,6 +60,12 @@ class EvidenceClass(StrEnum):
     IMAGE_PULL_WITHOUT_DETAIL = "image_pull_without_detail"
     OOM_WITH_LIMITS = "oom_with_limits"
     OOM_WITHOUT_LIMITS = "oom_without_limits"
+    # The StartError/128 shape from docs/DESIGN.md 2.2. Kept apart from the
+    # running OOM because the evidence is different in kind: there is no
+    # kernel verdict in a structured field, only a runtime message whose
+    # wording is not stable, and there are no logs by construction.
+    OOM_DURING_INIT_WITH_MARKER = "oom_during_init_with_marker"
+    OOM_DURING_INIT_WITHOUT_MARKER = "oom_during_init_without_marker"
     CRASHLOOP_WITH_FATAL_LOG = "crashloop_with_fatal_log"
     CRASHLOOP_LOGS_NO_ERROR = "crashloop_logs_no_error"
     CRASHLOOP_LOGS_UNAVAILABLE = "crashloop_logs_unavailable"
@@ -61,6 +79,8 @@ CEILINGS: dict[EvidenceClass, float] = {
     EvidenceClass.IMAGE_PULL_WITHOUT_DETAIL: 0.50,
     EvidenceClass.OOM_WITH_LIMITS: 0.90,
     EvidenceClass.OOM_WITHOUT_LIMITS: 0.60,
+    EvidenceClass.OOM_DURING_INIT_WITH_MARKER: 0.80,
+    EvidenceClass.OOM_DURING_INIT_WITHOUT_MARKER: 0.15,
     EvidenceClass.CRASHLOOP_WITH_FATAL_LOG: 0.80,
     EvidenceClass.CRASHLOOP_LOGS_NO_ERROR: 0.40,
     EvidenceClass.CRASHLOOP_LOGS_UNAVAILABLE: 0.15,
@@ -105,6 +125,23 @@ def registry_error_present(contract: Contract) -> bool:
     )
 
 
+def oom_marker_present(contract: Contract) -> bool:
+    """True when the runtime, in the termination message or any event, named memory.
+
+    For a kill during container init this is the only evidence there is. No
+    application code ran, so there are no logs, and the exit code is 128 with
+    reason StartError, which is what every failure to start a container looks
+    like. Events are included because the runtime's wording for the same kill
+    is not stable across restarts and an earlier restart's event may carry the
+    marker the latest termination message lacks.
+    """
+    haystacks = [contract.container.waiting_message.lower()]
+    if contract.container.last_terminated is not None:
+        haystacks.append(contract.container.last_terminated.message.lower())
+    haystacks += [e.message.lower() for e in contract.events]
+    return any(marker in h for h in haystacks for marker in OOM_MARKERS)
+
+
 def classify_evidence(contract: Contract) -> EvidenceClass:
     """Classify what the evidence can support. Deterministic, no model call."""
     failure = contract.failure_type
@@ -116,9 +153,18 @@ def classify_evidence(contract: Contract) -> EvidenceClass:
             else EvidenceClass.IMAGE_PULL_WITHOUT_DETAIL
         )
 
-    if failure in ("OOMKilled", "OOMKilledDuringInit"):
+    if failure == "OOMKilled":
         has_limits = bool(contract.container.memory_limit)
         return EvidenceClass.OOM_WITH_LIMITS if has_limits else EvidenceClass.OOM_WITHOUT_LIMITS
+
+    if failure == "OOMKilledDuringInit":
+        if not contract.container.memory_limit:
+            return EvidenceClass.OOM_WITHOUT_LIMITS
+        return (
+            EvidenceClass.OOM_DURING_INIT_WITH_MARKER
+            if oom_marker_present(contract)
+            else EvidenceClass.OOM_DURING_INIT_WITHOUT_MARKER
+        )
 
     if failure == "CrashLoopBackOff":
         if not has_usable_logs(contract):
@@ -157,6 +203,15 @@ def gate(contract: Contract, evidence_class: EvidenceClass) -> tuple[bool, str]:
             f"No causal signal is present. The failure is CrashLoopBackOff with exit code "
             f"{exit_code if exit_code is not None else 'unknown'}, which is generic, and "
             f"{detail}. Nothing in the collected evidence names a cause."
+        )
+
+    if evidence_class is EvidenceClass.OOM_DURING_INIT_WITHOUT_MARKER:
+        return True, (
+            "The failure was classified as a memory kill during container init, but neither "
+            "the termination message nor any event for this pod names memory. The exit code "
+            "128 with reason StartError is what every failure to start a container looks "
+            "like, and there are no logs because nothing ran. Nothing in the collected "
+            "evidence identifies the cause."
         )
 
     if CEILINGS[evidence_class] < ABSTAIN_BELOW:

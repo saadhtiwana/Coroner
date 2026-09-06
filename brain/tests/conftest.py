@@ -40,6 +40,18 @@ def oom_init() -> Contract:
 
 
 @pytest.fixture
+def starterror_procready() -> Contract:
+    """Recorded live 2026-09-06 from the same 2Mi probe as oomkilled-during-init.
+
+    The runtime worded this restart's kill as "procReady not received" rather
+    than naming memory, so the agent of the day classified it as an ordinary
+    CrashLoopBackOff with exit 128 and empty logs. It is the first organically
+    thin incident the gate has seen.
+    """
+    return load_contract("starterror-procready")
+
+
+@pytest.fixture
 def ledger(tmp_path: Path) -> object:
     """A throwaway ledger.
 

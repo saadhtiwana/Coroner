@@ -1,0 +1,129 @@
+{
+  "contract_version": "1",
+  "incident_id": "inc-4800ffbb81d4",
+  "collected_at": "2026-09-06T18:00:21.515254+05:00",
+  "failure_type": "CrashLoopBackOff",
+  "pod": {
+    "namespace": "default",
+    "name": "probe-oom-init",
+    "uid": "2d68543e-b99e-4159-abd3-95e319429ece",
+    "node_name": "coroner-worker",
+    "phase": "Running",
+    "created_at": "2026-09-06T17:55:08+05:00",
+    "age_seconds": 313.515254
+  },
+  "container": {
+    "name": "tiny",
+    "image": "docker.io/library/redis:alpine",
+    "image_id": "docker.io/library/import-2026-09-06@sha256:746e751629aab2acb6008842845516e2d9e3212c86ff1c4aa14f6d81a0b8f5f1",
+    "ready": false,
+    "restart_count": 5,
+    "command": [
+      "/bin/sh",
+      "-c",
+      "echo alive; sleep 3600"
+    ],
+    "waiting_reason": "CrashLoopBackOff",
+    "waiting_message": "back-off 2m40s restarting failed container=tiny pod=probe-oom-init_default(2d68543e-b99e-4159-abd3-95e319429ece)",
+    "last_terminated": {
+      "exit_code": 128,
+      "reason": "StartError",
+      "message": "failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: procReady not received",
+      "started_at": "1970-01-01T05:00:00+05:00",
+      "finished_at": "2026-09-06T17:58:19+05:00"
+    },
+    "memory_limit": "2Mi",
+    "memory_request": "2Mi",
+    "has_liveness_probe": false,
+    "has_readiness_probe": false,
+    "crashes_per_minute": 0.9568912394929274
+  },
+  "events": [
+    {
+      "type": "Normal",
+      "reason": "Scheduled",
+      "message": "Successfully assigned default/probe-oom-init to coroner-worker",
+      "count": 1,
+      "first_timestamp": "2026-09-06T17:55:08+05:00",
+      "last_timestamp": "2026-09-06T17:55:08+05:00",
+      "occurrences": 1,
+      "first_seen": "2026-09-06T17:55:08+05:00",
+      "last_seen": "2026-09-06T17:55:08+05:00"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: container init was OOM-killed (memory limit too low?)",
+      "count": 4,
+      "first_timestamp": "2026-09-06T17:55:09+05:00",
+      "last_timestamp": "2026-09-06T17:56:50+05:00",
+      "occurrences": 4,
+      "first_seen": "2026-09-06T17:55:09+05:00",
+      "last_seen": "2026-09-06T17:56:50+05:00",
+      "aggregated": "x4 over 1m41s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "message": "Container image \"redis:alpine\" already present on machine and can be accessed by the pod",
+      "count": 6,
+      "first_timestamp": "2026-09-06T17:55:09+05:00",
+      "last_timestamp": "2026-09-06T17:58:19+05:00",
+      "occurrences": 6,
+      "first_seen": "2026-09-06T17:55:09+05:00",
+      "last_seen": "2026-09-06T17:58:19+05:00",
+      "aggregated": "x6 over 3m10s"
+    },
+    {
+      "type": "Normal",
+      "reason": "Created",
+      "message": "Container created",
+      "count": 6,
+      "first_timestamp": "2026-09-06T17:55:09+05:00",
+      "last_timestamp": "2026-09-06T17:58:19+05:00",
+      "occurrences": 6,
+      "first_seen": "2026-09-06T17:55:09+05:00",
+      "last_seen": "2026-09-06T17:58:19+05:00",
+      "aggregated": "x6 over 3m10s"
+    },
+    {
+      "type": "Warning",
+      "reason": "Failed",
+      "message": "Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: procReady not received",
+      "count": 2,
+      "first_timestamp": "2026-09-06T17:55:09+05:00",
+      "last_timestamp": "2026-09-06T17:58:19+05:00",
+      "occurrences": 2,
+      "first_seen": "2026-09-06T17:55:09+05:00",
+      "last_seen": "2026-09-06T17:58:19+05:00",
+      "aggregated": "x2 over 3m10s"
+    },
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container tiny in pod probe-oom-init_default(2d68543e-b99e-4159-abd3-95e319429ece)",
+      "count": 6,
+      "first_timestamp": "2026-09-06T17:55:10+05:00",
+      "last_timestamp": "2026-09-06T17:59:49+05:00",
+      "occurrences": 6,
+      "first_seen": "2026-09-06T17:55:10+05:00",
+      "last_seen": "2026-09-06T17:59:49+05:00",
+      "aggregated": "x6 over 4m39s"
+    }
+  ],
+  "logs": {
+    "available": true,
+    "empty": true,
+    "from_previous": true,
+    "truncated": false,
+    "content": ""
+  },
+  "node": {
+    "name": "coroner-worker",
+    "ready": true,
+    "memory_pressure": false,
+    "disk_pressure": false,
+    "pid_pressure": false
+  },
+  "redacted_count": 0
+}

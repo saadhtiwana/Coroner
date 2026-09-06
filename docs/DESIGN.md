@@ -1050,6 +1050,44 @@ the ceiling; if it ever does, that will be visible in the ledger.
 
 **Ratified as implemented.**
 
+### 6.17 What the agent will and will not execute
+
+**Decision:** an approved action is executed only when it reduces to one of
+two patches on the owning workload's pod template: raise a memory limit, or
+set an image. Everything else is emitted as a manual plan that says why it
+will not run. A bare pod is never touched. Execution is off by default and
+needs `--execute` plus `deploy/manifests/rbac-write.yaml`, which grants
+`patch` on deployments, statefulsets, and daemonsets and nothing else.
+
+The brain proposes in prose and the human approves prose. Turning prose into
+a mutation is where a remediation system does damage, so the mapping is
+deliberately narrow and deterministic: a memory quantity in the approved
+text becomes the new limit, otherwise the limit doubles with a floor; an
+image reference in the text that differs from the failing one becomes the
+new image, otherwise there is nothing to set and the plan says so. A
+CrashLoopBackOff is always manual, because the cause is inside the
+application and the agent will not restart or patch a workload whose fix it
+cannot state. A bare pod is always manual, because its resources and image
+are immutable and the only remediation is recreation, which is a decision the
+agent does not make.
+
+The token is verified before anything else is read. Its context hash is the
+brain's hash of the evidence, and the agent cannot recompute it from its own
+serialisation, so when this process sent the contract it holds the approval
+to the hash it received with the verdict, and after a restart it holds it to
+the token alone, which the brain's decision path minted with the shared
+secret over that same hash. The plan is built from the contract stored on
+the ledger row, so the agent needs no memory of its own to act correctly,
+only the secret.
+
+Resolution is the controller's status, not a pod's: every desired replica
+Ready on the current generation within ten minutes, and every observation
+Ready for thirty more. A workload that flaps has not resolved. This is the
+section 5.2 label, and it is only recorded after an executed action, because
+a workload that recovered on its own says nothing about the action.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability

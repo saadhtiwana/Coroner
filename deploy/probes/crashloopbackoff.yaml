@@ -1,0 +1,36 @@
+# Recreates the recorded CrashLoopBackOff incident: an application that cannot
+# reach Postgres and exits 1. The cause exists only in the container's own log
+# lines; nothing in the API surface names it. docs/DESIGN.md section 2.3.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+  namespace: default
+  labels:
+    coroner.dev/purpose: probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders-api
+  template:
+    metadata:
+      labels:
+        app: orders-api
+        coroner.dev/purpose: probe
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: orders-api
+          image: redis:alpine
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[startup] orders-api booting"
+              echo "[config]  DATABASE_URL=postgres://orders@db.internal:5432/orders"
+              echo "[startup] establishing connection pool (size=10)"
+              sleep 2
+              echo "[error]   dial tcp 10.96.31.14:5432: connect: connection refused" >&2
+              echo "[fatal]   could not initialise connection pool after 1 attempt" >&2
+              exit 1

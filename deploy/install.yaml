@@ -1,0 +1,191 @@
+# Coroner, in one file, for a cluster you already have.
+#
+#   kubectl create namespace coroner
+#   kubectl create secret generic coroner-model -n coroner \
+#       --from-literal=api-key=YOUR_KEY
+#   kubectl apply -f https://raw.githubusercontent.com/saadhtiwana/Coroner/main/deploy/install.yaml
+#
+# The model key is the only required configuration. What you get: the agent
+# watches every namespace for the four failure shapes, ships an evidence
+# contract to the brain, and the brain writes a diagnosis to its own stdout.
+#
+#   kubectl logs -n coroner deploy/coroner-brain -f
+#
+# Two limits worth knowing before you rely on this. The ledger is on an
+# emptyDir, so the accuracy record does not survive a restart of the brain;
+# give it a PersistentVolumeClaim if you want to keep it. And every failure
+# type starts in shadow mode, so nothing offers approval until you promote
+# one with CORONER_PROMOTED_TYPES; see docs/DESIGN.md section 5.5.
+#
+# The agent's RBAC is read-only. Execution needs deploy/manifests/rbac-write.yaml
+# and the --execute flag, both applied deliberately; see section 6.5.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: coroner
+  labels:
+    app.kubernetes.io/name: coroner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coroner-agent
+  namespace: coroner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coroner-agent-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coroner-agent-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: coroner-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: coroner-agent
+    namespace: coroner
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coroner-brain
+  namespace: coroner
+  labels:
+    app.kubernetes.io/name: coroner
+    app.kubernetes.io/component: brain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: brain
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coroner
+        app.kubernetes.io/component: brain
+    spec:
+      # No service account token: the brain has no business with the API
+      # server, and the approval gate is only enforceable while that is true.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: brain
+          image: ghcr.io/saadhtiwana/coroner-brain:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: coroner-model
+                  key: api-key
+            - name: CORONER_SINK
+              value: stdout
+            - name: CORONER_LEDGER_PATH
+              value: /var/lib/coroner/ledger.sqlite3
+            # Empty: every failure type stays in shadow mode until it has
+            # cleared its prediction. Section 5.5.
+            - name: CORONER_PROMOTED_TYPES
+              value: ""
+            - name: CORONER_TRACING
+              value: console
+          volumeMounts:
+            - name: ledger
+              mountPath: /var/lib/coroner
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        # Ephemeral. The ledger is the accuracy record; replace this with a
+        # PersistentVolumeClaim if you intend to keep it.
+        - name: ledger
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coroner-brain
+  namespace: coroner
+spec:
+  selector:
+    app.kubernetes.io/component: brain
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coroner-agent
+  namespace: coroner
+  labels:
+    app.kubernetes.io/name: coroner
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coroner
+        app.kubernetes.io/component: agent
+    spec:
+      serviceAccountName: coroner-agent
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: agent
+          image: ghcr.io/saadhtiwana/coroner-agent:main
+          imagePullPolicy: IfNotPresent
+          args:
+            - --brain-url=http://coroner-brain.coroner.svc:8000
+            - --log-level=info
+          env:
+            - name: CORONER_TRACING
+              value: console
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

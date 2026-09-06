@@ -1088,6 +1088,40 @@ a workload that recovered on its own says nothing about the action.
 
 **Ratified as implemented.**
 
+### 6.18 Cost is recorded per row, prices are configuration, and the evaluation spans daily windows
+
+**Decision:** every ledger row carries prompt tokens, completion tokens, a
+cost in US dollars, and total latency. The cost is tokens multiplied by
+`CORONER_PRICE_INPUT_PER_M` and `CORONER_PRICE_OUTPUT_PER_M`, which default
+to the published on-demand price of `openai/gpt-oss-120b` on Groq on
+2026-09-06, 0.15 and 0.60 dollars per million. They are configuration and
+are stated as such wherever the cost is reported: change the model and the
+numbers must change with it, or the column is fiction.
+
+Abstention cost is reported separately from diagnosis cost, and cost per
+correct diagnosis beside cost per diagnosis. An abstention at the evidence
+gate made no model call and records zero tokens. Whether that makes the
+safety mechanism also the cheapest path is a measurement the section 5
+harness makes, not a claim this section makes.
+
+**The token budget.** The provider's on-demand tier allows 200000 tokens a
+day on this model. The section 6.16 stability run spent most of one day's
+budget, and the first live Step 3 pass on 2026-09-06 saw every diagnosis
+DISCARDED with "try again in 24m". A 69-incident evaluation at about 5000
+tokens each, with retries, does not fit in one window on any pacing. Three
+choices were available: wait and run across windows, run on a second model
+with its own quota, or change tier. The tier is a billing decision and not
+mine. A second model would make the evaluation measure a model section 6.7
+did not choose. So the evaluation keeps the chosen model and runs across
+daily windows: contracts are captured once, at detection time, and the
+diagnose phase is resumable, retrying a rate-limited row after the wait the
+provider names and leaving every other discard as it is. The contract is
+also now sent as compact JSON, prompt version 3, which removes about a fifth
+of the characters; what that is worth in tokens is read from the ledger, not
+assumed.
+
+**Ratified as implemented.**
+
 ---
 
 ## 7. Evaluability
